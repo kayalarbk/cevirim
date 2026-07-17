@@ -9,6 +9,7 @@
 - **Farklı anlamlar ve örnek cümleler** — çevrilen kelimenin sözlük anlamları ve kullanım örnekleri gösterilir.
 - **Kelime defteri** — istediğiniz çeviriyi kaydedin; kelimeler tarayıcıda kalıcı saklanır (localStorage).
 - **Çalışma modu** — kaydedilen kelimeler karıştırılıp 3D dönen kartlarla çalışılır.
+- **Modern arayüz** — koyu tema, cam (glassmorphism) kartlar, arka planda süzülen ışık küreleri ve yıldız tozu parçacıkları.
 
 ## Veri kaynakları
 
@@ -24,7 +25,7 @@
 cevirim/
 ├── index.html        # Sayfa iskeleti
 ├── css/
-│   └── style.css     # Tema (bej + lacivert) ve animasyonlar
+│   └── style.css     # Modern koyu tema, cam efekti, hareketli arka plan
 ├── js/
 │   ├── api.js        # İnternetten veri çeken katman
 │   ├── storage.js    # localStorage kalıcılık katmanı

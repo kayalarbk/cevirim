@@ -327,5 +327,23 @@ function showToast(msg) {
   toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
 }
 
+// ---------- Arka plan parçacıkları (yıldız tozu) ----------
+function spawnParticles(count) {
+  const scene = $("bgScene");
+  if (!scene) return;
+  for (let i = 0; i < count; i++) {
+    const p = document.createElement("span");
+    p.className = "particle";
+    const size = 2 + Math.random() * 4;
+    p.style.width = size + "px";
+    p.style.height = size + "px";
+    p.style.left = Math.random() * 100 + "vw";
+    p.style.animationDuration = 9 + Math.random() * 14 + "s";
+    p.style.animationDelay = -Math.random() * 20 + "s";
+    scene.appendChild(p);
+  }
+}
+
 // ---------- İlk yükleme ----------
+spawnParticles(26);
 persist();
