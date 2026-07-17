@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="İngilizce-Türkçe çeviri ve kişisel kelime defteri uygulaması">
+  <title>Çevirim — İngilizce ⇄ Türkçe</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header>
+  <h1>Çevirim</h1> <span class="globe">🌐</span>
+  <p>İngilizce ⇄ Türkçe çeviri + kişisel kelime defteri</p>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="translate">Çeviri</button>
+  <button class="tab-btn" data-tab="words">Kelimelerim <span class="badge" id="wordCount">0</span></button>
+  <button class="tab-btn" data-tab="study">Çalış 🎓</button>
+</div>
+
+<main>
+  <!-- ÇEVİRİ -->
+  <section id="translate" class="active">
+    <div class="card">
+      <div class="lang-row">
+        <span class="lang" id="srcLang">İngilizce</span>
+        <button id="swapBtn" title="Dilleri değiştir">⇄</button>
+        <span class="lang" id="dstLang">Türkçe</span>
+      </div>
+
+      <div class="boxes">
+        <div class="box input-wrap">
+          <span class="box-label">Metin</span>
+          <div class="ghost-layer" id="ghostLayer"></div>
+          <textarea id="sourceText" placeholder="Yazmaya başlayın, çeviri otomatik gelir..." spellcheck="false"></textarea>
+          <span class="ghost-hint" id="ghostHint">Tab ↹ ile tamamla</span>
+        </div>
+        <div class="box">
+          <span class="box-label">Çeviri</span>
+          <div id="resultBox" class="empty">Çeviri burada görünecek...</div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn" id="saveBtn" disabled>➕ Kelimeyi Kaydet</button>
+      </div>
+
+      <div class="details" id="details">
+        <div id="meanings"></div>
+        <div id="examples"></div>
+      </div>
+
+      <p class="hint">Yazmayı bıraktığınızda çeviri otomatik yapılır; veri internetten <b>Google Translate</b> (yedek: MyMemory) üzerinden alınır. İngilizce yazarken saydam kelime tahminini <b>Tab</b> ile tamamlayabilirsiniz.</p>
+    </div>
+  </section>
+
+  <!-- KELİMELERİM -->
+  <section id="words">
+    <div class="card">
+      <div class="list-actions">
+        <input type="text" id="searchInput" placeholder="🔍 Kelime ara...">
+        <button class="btn btn-danger" id="clearAllBtn">Tümünü Sil</button>
+      </div>
+      <div id="wordList"></div>
+    </div>
+  </section>
+
+  <!-- ÇALIŞ -->
+  <section id="study">
+    <div class="card">
+      <div class="progress" id="studyProgress"></div>
+      <div class="flashcard" id="flashcard">
+        <div class="fc-inner">
+          <div class="fc-face fc-front" id="fcFront">
+            <span class="label">Başlamak için "Karıştır ve Başla"ya bas</span>
+          </div>
+          <div class="fc-face fc-back" id="fcBack"></div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="startStudyBtn">🔀 Karıştır ve Başla</button>
+        <button class="btn" id="nextCardBtn" disabled>Sonraki ➡</button>
+      </div>
+      <p class="hint">Karta tıklayınca kart dönerek cevabı gösterir. Kartlar kaydettiğin kelimelerden gelir.</p>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/api.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
