@@ -9,7 +9,9 @@ function esc(s) {
   return String(s)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 // ---------- Durum ----------
@@ -62,6 +64,8 @@ async function translate() {
   box.classList.remove("empty");
   box.textContent = "Çevriliyor...";
   $("saveBtn").disabled = true;
+  lastTranslation = null;
+  updateToolButtons();
   try {
     const { translated, meanings, examples } = await API.translate(text, srcLang, dstLang);
     if (myReq !== requestSeq) return; // daha yeni bir istek var
@@ -71,11 +75,13 @@ async function translate() {
     box.classList.add("pop");
     lastTranslation = { src: text, dst: translated, from: srcLang, to: dstLang };
     $("saveBtn").disabled = false;
+    updateToolButtons();
     renderDetails(meanings, examples);
   } catch (err) {
     if (myReq !== requestSeq) return;
     box.textContent = "⚠ Çeviri alınamadı: " + err.message + "\nİnternet bağlantınızı kontrol edin.";
     lastTranslation = null;
+    updateToolButtons();
     renderDetails([], []);
   }
 }
@@ -86,8 +92,80 @@ function resetResult() {
   box.textContent = "Çeviri burada görünecek...";
   $("saveBtn").disabled = true;
   lastTranslation = null;
+  updateToolButtons();
   renderDetails([], []);
 }
+
+// ---------- Kutu araçları: seslendir & kopyala ----------
+const canSpeak = "speechSynthesis" in window;
+
+function langTag(code) {
+  return code === "en" ? "en-US" : "tr-TR";
+}
+
+function speak(text, code, btn) {
+  if (!canSpeak || !text) return;
+  speechSynthesis.cancel();
+  document.querySelectorAll(".tool-btn.speaking").forEach((b) => b.classList.remove("speaking"));
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = langTag(code);
+  u.rate = 0.95;
+  btn.classList.add("speaking");
+  u.onend = u.onerror = () => btn.classList.remove("speaking");
+  speechSynthesis.speak(u);
+}
+
+async function copyText(text, btn) {
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Clipboard API yoksa veya izin verilmediyse eski yöntem
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+    } catch {
+      showToast("Kopyalanamadı 😕");
+      ta.remove();
+      return;
+    }
+    ta.remove();
+  }
+  btn.textContent = "✔";
+  btn.classList.add("done");
+  setTimeout(() => {
+    btn.textContent = "📋";
+    btn.classList.remove("done");
+  }, 1200);
+  showToast("Panoya kopyalandı ✔");
+}
+
+function updateToolButtons() {
+  const src = $("sourceText").value.trim();
+  const dst = lastTranslation ? lastTranslation.dst : "";
+  $("copySrcBtn").disabled = !src;
+  $("speakSrcBtn").disabled = !src || !canSpeak;
+  $("copyDstBtn").disabled = !dst;
+  $("speakDstBtn").disabled = !dst || !canSpeak;
+}
+
+$("copySrcBtn").addEventListener("click", (e) =>
+  copyText($("sourceText").value.trim(), e.currentTarget)
+);
+$("copyDstBtn").addEventListener("click", (e) =>
+  copyText(lastTranslation ? lastTranslation.dst : "", e.currentTarget)
+);
+$("speakSrcBtn").addEventListener("click", (e) =>
+  speak($("sourceText").value.trim(), srcLang, e.currentTarget)
+);
+$("speakDstBtn").addEventListener("click", (e) =>
+  speak(lastTranslation ? lastTranslation.dst : "", dstLang, e.currentTarget)
+);
 
 let autoTimer;
 $("sourceText").addEventListener("input", () => {
@@ -99,17 +177,30 @@ $("sourceText").addEventListener("input", () => {
     return;
   }
   autoTimer = setTimeout(translate, 500);
-  updateGhost();
+  updateToolButtons();
+  scheduleGhost();
 });
 
 // ---------- Hayalet kelime tahmini ----------
 let ghostSuggestion = null; // tamamlanmış kelimenin tamamı
 let ghostSeq = 0;
+let ghostTimer;
+let ghostAbort = null;
 
 function clearGhost() {
+  clearTimeout(ghostTimer);
+  if (ghostAbort) ghostAbort.abort();
   ghostSuggestion = null;
   $("ghostLayer").innerHTML = "";
   $("ghostHint").classList.remove("show");
+}
+
+// Her tuş vuruşunda ağa çıkmamak için tahmini geciktir ve
+// bekleyen isteği iptal et.
+function scheduleGhost() {
+  clearTimeout(ghostTimer);
+  if (ghostAbort) ghostAbort.abort();
+  ghostTimer = setTimeout(updateGhost, 250);
 }
 
 async function updateGhost() {
@@ -127,7 +218,8 @@ async function updateGhost() {
   }
   const prefix = match[1];
   const mySeq = ++ghostSeq;
-  const word = await API.suggest(prefix).catch(() => null);
+  ghostAbort = new AbortController();
+  const word = await API.suggest(prefix, ghostAbort.signal).catch(() => null);
   if (mySeq !== ghostSeq || ta.value !== value) return; // metin değişti
   if (!word) {
     clearGhost();
@@ -144,7 +236,10 @@ $("sourceText").addEventListener("keydown", (e) => {
   if (e.key === "Tab" && ghostSuggestion) {
     e.preventDefault();
     const ta = $("sourceText");
-    ta.value = ta.value.replace(/([A-Za-z']+)$/, ghostSuggestion);
+    // replace() yerine dilimleme: öneride "$" geçerse replace onu
+    // özel karakter sayardı.
+    const m = ta.value.match(/([A-Za-z']+)$/);
+    if (m) ta.value = ta.value.slice(0, ta.value.length - m[1].length) + ghostSuggestion;
     clearGhost();
     ta.dispatchEvent(new Event("input"));
   }
@@ -251,17 +346,23 @@ function renderWords() {
           <div class="src">${esc(w.src)} <span class="arrow">→</span> <span class="dst">${esc(w.dst)}</span></div>
           <div class="meta">${w.from === "en" ? "EN → TR" : "TR → EN"} · ${d.toLocaleDateString("tr-TR")}</div>
         </div>
-        <button title="Sil" onclick="removeWord(${idx})">🗑</button>
+        <button title="Sil" aria-label="${esc(w.src)} kelimesini sil" data-idx="${idx}">🗑</button>
       </div>`;
     })
     .join("");
 }
 
-function removeWord(idx) {
+// Silme işlemleri liste kapsayıcısında dinlenir; böylece satır HTML'ine
+// inline onclick gömmek gerekmez.
+$("wordList").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-idx]");
+  if (!btn) return;
+  const idx = Number(btn.dataset.idx);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= words.length) return;
   words.splice(idx, 1);
   persist();
   renderWords();
-}
+});
 
 $("searchInput").addEventListener("input", renderWords);
 $("clearAllBtn").addEventListener("click", () => {
@@ -347,3 +448,4 @@ function spawnParticles(count) {
 // ---------- İlk yükleme ----------
 spawnParticles(26);
 persist();
+updateToolButtons();

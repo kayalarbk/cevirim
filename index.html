@@ -40,13 +40,21 @@
       <div class="boxes">
         <div class="box input-wrap">
           <span class="box-label">Metin</span>
+          <div class="box-tools">
+            <button class="tool-btn" id="speakSrcBtn" type="button" title="Seslendir" aria-label="Metni seslendir" disabled>🔊</button>
+            <button class="tool-btn" id="copySrcBtn" type="button" title="Kopyala" aria-label="Metni kopyala" disabled>📋</button>
+          </div>
           <div class="ghost-layer" id="ghostLayer"></div>
-          <textarea id="sourceText" placeholder="Yazmaya başlayın, çeviri otomatik gelir..." spellcheck="false"></textarea>
+          <textarea id="sourceText" maxlength="1000" placeholder="Yazmaya başlayın, çeviri otomatik gelir..." spellcheck="false"></textarea>
           <span class="ghost-hint" id="ghostHint">Tab ↹ ile tamamla</span>
         </div>
         <div class="box">
           <span class="box-label">Çeviri</span>
-          <div id="resultBox" class="empty">Çeviri burada görünecek...</div>
+          <div class="box-tools">
+            <button class="tool-btn" id="speakDstBtn" type="button" title="Seslendir" aria-label="Çeviriyi seslendir" disabled>🔊</button>
+            <button class="tool-btn" id="copyDstBtn" type="button" title="Kopyala" aria-label="Çeviriyi kopyala" disabled>📋</button>
+          </div>
+          <div id="resultBox" class="empty" aria-live="polite">Çeviri burada görünecek...</div>
         </div>
       </div>
 
@@ -59,7 +67,7 @@
         <div id="examples"></div>
       </div>
 
-      <p class="hint">Yazmayı bıraktığınızda çeviri otomatik yapılır; veri internetten <b>Google Translate</b> (yedek: MyMemory) üzerinden alınır. İngilizce yazarken saydam kelime tahminini <b>Tab</b> ile tamamlayabilirsiniz.</p>
+      <p class="hint">Yazmayı bıraktığınızda çeviri otomatik yapılır; veri internetten <b>Google Translate</b> (yedek: MyMemory) üzerinden alınır. İngilizce yazarken saydam kelime tahminini <b>Tab</b> ile tamamlayabilirsiniz. Kutuların sağ üstündeki <b>🔊</b> ile seslendirme, <b>📋</b> ile kopyalama yapabilirsiniz.</p>
     </div>
   </section>
 
