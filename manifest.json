@@ -1,0 +1,19 @@
+{
+  "name": "Çevirim — İngilizce ⇄ Türkçe",
+  "short_name": "Çevirim",
+  "description": "İngilizce-Türkçe çeviri ve kişisel kelime defteri",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0e1020",
+  "theme_color": "#0e1020",
+  "lang": "tr",
+  "dir": "ltr",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

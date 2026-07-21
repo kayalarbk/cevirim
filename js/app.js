@@ -41,15 +41,20 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.classList.add("active");
     $(btn.dataset.tab).classList.add("active");
     if (btn.dataset.tab === "words") renderWords();
+    if (btn.dataset.tab === "study") renderStudySummary();
   });
 });
 
 // ---------- Dil değiştirme ----------
-$("swapBtn").addEventListener("click", () => {
+function swapLangs() {
   [srcLang, dstLang] = [dstLang, srcLang];
   $("srcLang").textContent = srcLang === "en" ? "İngilizce" : "Türkçe";
   $("dstLang").textContent = dstLang === "en" ? "İngilizce" : "Türkçe";
   clearGhost();
+}
+
+$("swapBtn").addEventListener("click", () => {
+  swapLangs();
   if ($("sourceText").value.trim()) translate();
 });
 
@@ -76,7 +81,10 @@ async function translate() {
     lastTranslation = { src: text, dst: translated, from: srcLang, to: dstLang };
     $("saveBtn").disabled = false;
     updateToolButtons();
+    currentExamples = examples || [];
+    pickedExample = "";
     renderDetails(meanings, examples);
+    pushHistory(lastTranslation);
   } catch (err) {
     if (myReq !== requestSeq) return;
     box.textContent = "⚠ Çeviri alınamadı: " + err.message + "\nİnternet bağlantınızı kontrol edin.";
@@ -280,20 +288,87 @@ function renderDetails(meanings, examples) {
 
   if (examples && examples.length) {
     eBox.innerHTML =
-      "<h3>Örnek Cümleler</h3>" +
+      "<h3>Örnek Cümleler <span class=\"h-note\">— tıklayarak kelimeye iliştir</span></h3>" +
       examples
         .slice(0, 4)
-        .map((ex) => {
+        .map((ex, i) => {
           const safe = esc(ex)
             .replace(/&lt;b&gt;/g, "<b>")
             .replace(/&lt;\/b&gt;/g, "</b>");
-          return `<div class="example-item">${safe}</div>`;
+          return `<button class="example-item" type="button" data-ex="${i}">${safe}</button>`;
         })
         .join("");
   }
 
   panel.classList.add("show");
 }
+
+// ---------- Örnek cümleyi kelimeye iliştirme ----------
+let currentExamples = [];
+let pickedExample = "";
+
+$("examples").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-ex]");
+  if (!btn) return;
+  const text = currentExamples[Number(btn.dataset.ex)] || "";
+  // Aynı cümleye ikinci kez tıklamak seçimi kaldırır.
+  const already = btn.classList.contains("picked");
+  $("examples").querySelectorAll(".example-item").forEach((b) => b.classList.remove("picked"));
+  if (already) {
+    pickedExample = "";
+    return;
+  }
+  btn.classList.add("picked");
+  pickedExample = text.replace(/<\/?b>/g, "");
+  showToast("Cümle kayda iliştirilecek 📎");
+});
+
+// ---------- Oturum çeviri geçmişi ----------
+// Yalnızca bellekte tutulur: kaydetmediğim çevirileri geri bulmak için.
+let history = [];
+const HISTORY_MAX = 20;
+
+function pushHistory(entry) {
+  history = history.filter((h) => !(h.src === entry.src && h.from === entry.from));
+  history.unshift(entry);
+  if (history.length > HISTORY_MAX) history.pop();
+  renderHistory();
+}
+
+function renderHistory() {
+  const panel = $("history");
+  if (history.length === 0) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  $("historyList").innerHTML = history
+    .map(
+      (h, i) =>
+        `<button class="history-item" type="button" data-h="${i}">
+           <span class="h-src">${esc(h.src)}</span>
+           <span class="arrow">→</span>
+           <span class="h-dst">${esc(h.dst)}</span>
+         </button>`
+    )
+    .join("");
+}
+
+$("historyList").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-h]");
+  if (!btn) return;
+  const h = history[Number(btn.dataset.h)];
+  if (!h) return;
+  if (h.from !== srcLang) swapLangs();
+  $("sourceText").value = h.src;
+  updateToolButtons();
+  translate();
+});
+
+$("clearHistoryBtn").addEventListener("click", () => {
+  history = [];
+  renderHistory();
+});
 
 // ---------- Kaydetme ----------
 $("saveBtn").addEventListener("click", () => {
@@ -311,7 +386,11 @@ $("saveBtn").addEventListener("click", () => {
     return;
   }
   words.unshift(
-    Store.normalize({ ...lastTranslation, date: new Date().toISOString() })
+    Store.normalize({
+      ...lastTranslation,
+      note: pickedExample,
+      date: new Date().toISOString(),
+    })
   );
   if (!persist()) {
     words.shift(); // yazılamadıysa listeyi eski haline döndür
@@ -514,6 +593,54 @@ function applyRestore(list, replace) {
   );
 }
 
+// ---------- Klavye kısayolları ----------
+function openTab(name) {
+  const btn = document.querySelector(`.tab-btn[data-tab="${name}"]`);
+  if (btn) btn.click();
+}
+
+function typingInField(el) {
+  return el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+}
+
+document.addEventListener("keydown", (e) => {
+  const mod = e.ctrlKey || e.metaKey;
+
+  // Ctrl+K: arama kutusuna atla (kelimeler sekmesini açar)
+  if (mod && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    openTab("words");
+    $("searchInput").focus();
+    $("searchInput").select();
+    return;
+  }
+
+  // Ctrl+Enter: görünen çeviriyi kaydet
+  if (mod && e.key === "Enter") {
+    e.preventDefault();
+    if (!$("saveBtn").disabled) $("saveBtn").click();
+    return;
+  }
+
+  // Esc: arama kutusunu temizle
+  if (e.key === "Escape" && document.activeElement === $("searchInput")) {
+    $("searchInput").value = "";
+    renderWords();
+    return;
+  }
+
+  // Çalışma kısayolları yalnızca deste açıkken ve bir alana yazmıyorken
+  if (deck.length === 0 || typingInField(document.activeElement)) return;
+  if (e.key === " ") {
+    e.preventDefault();
+    flipCard();
+  } else if (e.key === "1") {
+    grade(true);
+  } else if (e.key === "2") {
+    grade(false);
+  }
+});
+
 // Sekme gizlenirken bekleyen yazmayı kaçırmamak için hemen yaz.
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden" && Backup.active && Backup.pending) {
@@ -522,42 +649,159 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // ---------- Kelimelerim ----------
+let editingId = null; // satır içi düzenlemedeki kaydın id'si
+let activeTag = null; // seçili etiket filtresi
+
+const SORTERS = {
+  new: (a, b) => new Date(b.date) - new Date(a.date),
+  old: (a, b) => new Date(a.date) - new Date(b.date),
+  az: (a, b) => a.src.localeCompare(b.src, "tr"),
+  za: (a, b) => b.src.localeCompare(a.src, "tr"),
+  // Yanlış oranı yüksek olan üstte; hiç çalışılmamışlar en sonda
+  hard: (a, b) => b.wrong - b.right - (a.wrong - a.right),
+  due: (a, b) => new Date(a.due) - new Date(b.due),
+};
+
+function allTags() {
+  const set = new Set();
+  words.forEach((w) => w.tags.forEach((t) => set.add(t)));
+  return [...set].sort((a, b) => a.localeCompare(b, "tr"));
+}
+
+function renderTagFilters() {
+  const tags = allTags();
+  $("tagFilters").innerHTML = tags
+    .map(
+      (t) =>
+        `<button class="tag-chip${t === activeTag ? " active" : ""}" data-tag="${esc(t)}">${esc(t)}</button>`
+    )
+    .join("");
+}
+
+function matchesSearch(w, q) {
+  if (!q) return true;
+  return (
+    w.src.toLowerCase().includes(q) ||
+    w.dst.toLowerCase().includes(q) ||
+    w.note.toLowerCase().includes(q) ||
+    w.tags.some((t) => t.toLowerCase().includes(q))
+  );
+}
+
 function renderWords() {
   const q = $("searchInput").value.trim().toLowerCase();
+  const dir = $("dirSelect").value;
   const list = $("wordList");
-  const filtered = words.filter(
-    (w) => w.src.toLowerCase().includes(q) || w.dst.toLowerCase().includes(q)
-  );
+
+  const filtered = words
+    .filter((w) => matchesSearch(w, q))
+    .filter((w) => dir === "all" || w.from === dir)
+    .filter((w) => !activeTag || w.tags.includes(activeTag))
+    .sort(SORTERS[$("sortSelect").value] || SORTERS.new);
+
+  renderTagFilters();
+
   if (filtered.length === 0) {
     list.innerHTML = `<p class="empty-msg">${
       words.length === 0
         ? "Henüz kayıtlı kelime yok. Çeviri yapıp ➕ Kaydet'e bas!"
-        : "Aramayla eşleşen kelime yok."
+        : "Bu filtreyle eşleşen kelime yok."
     }</p>`;
     return;
   }
   list.innerHTML = filtered
-    .map((w, i) => {
-      const d = new Date(w.date);
-      const score =
-        w.right || w.wrong
-          ? ` · <span class="score">✔${w.right} ✘${w.wrong}</span>`
-          : "";
-      return `<div class="word-item" style="animation-delay:${Math.min(i * 0.04, 0.4)}s">
-        <div class="pair">
-          <div class="src">${esc(w.src)} <span class="arrow">→</span> <span class="dst">${esc(w.dst)}</span></div>
-          <div class="meta">${w.from === "en" ? "EN → TR" : "TR → EN"} · ${d.toLocaleDateString("tr-TR")}${score}</div>
-        </div>
-        <button title="Sil" aria-label="${esc(w.src)} kelimesini sil" data-id="${esc(w.id)}">🗑</button>
-      </div>`;
-    })
+    .map((w, i) => (w.id === editingId ? editRow(w) : viewRow(w, i)))
     .join("");
+}
+
+function viewRow(w, i) {
+  const score = w.right || w.wrong ? ` · <span class="score">✔${w.right} ✘${w.wrong}</span>` : "";
+  const note = w.note ? `<div class="word-note">“${esc(w.note)}”</div>` : "";
+  const tags = w.tags.length
+    ? `<div class="word-tags">${w.tags.map((t) => `<span class="tag-chip small">${esc(t)}</span>`).join("")}</div>`
+    : "";
+  return `<div class="word-item" style="animation-delay:${Math.min(i * 0.04, 0.4)}s">
+      <div class="pair">
+        <div class="src">${esc(w.src)} <span class="arrow">→</span> <span class="dst">${esc(w.dst)}</span></div>
+        <div class="meta">${w.from === "en" ? "EN → TR" : "TR → EN"} · ${new Date(w.date).toLocaleDateString("tr-TR")}${score} · ${dueLabel(w)}</div>
+        ${note}${tags}
+      </div>
+      <div class="row-actions">
+        <button class="row-btn" title="Düzenle" aria-label="${esc(w.src)} kaydını düzenle" data-edit="${esc(w.id)}">✏️</button>
+        <button class="row-btn" title="Sil" aria-label="${esc(w.src)} kelimesini sil" data-id="${esc(w.id)}">🗑</button>
+      </div>
+    </div>`;
+}
+
+function editRow(w) {
+  return `<div class="word-item editing">
+      <div class="edit-form">
+        <div class="edit-pair">
+          <input type="text" class="edit-input" id="editSrc" value="${esc(w.src)}" placeholder="Kelime" aria-label="Kelime">
+          <span class="arrow">→</span>
+          <input type="text" class="edit-input" id="editDst" value="${esc(w.dst)}" placeholder="Çeviri" aria-label="Çeviri">
+        </div>
+        <input type="text" class="edit-input" id="editNote" value="${esc(w.note)}" placeholder="Not / örnek cümle" aria-label="Not">
+        <input type="text" class="edit-input" id="editTags" value="${esc(w.tags.join(", "))}" placeholder="Etiketler (virgülle: iş, seyahat)" aria-label="Etiketler">
+        <div class="edit-actions">
+          <button class="btn btn-soft" data-save="${esc(w.id)}">✔ Kaydet</button>
+          <button class="btn btn-soft" data-cancel="1">Vazgeç</button>
+        </div>
+      </div>
+    </div>`;
 }
 
 // Silme işlemleri liste kapsayıcısında dinlenir; böylece satır HTML'ine
 // inline onclick gömmek gerekmez. Dizin yerine id kullanmak, arama
 // filtresi açıkken yanlış satırın silinmesini engeller.
 $("wordList").addEventListener("click", (e) => {
+  const edit = e.target.closest("button[data-edit]");
+  if (edit) {
+    editingId = edit.dataset.edit;
+    renderWords();
+    const first = $("editSrc");
+    if (first) {
+      first.focus();
+      first.select();
+    }
+    return;
+  }
+
+  if (e.target.closest("button[data-cancel]")) {
+    editingId = null;
+    renderWords();
+    return;
+  }
+
+  const save = e.target.closest("button[data-save]");
+  if (save) {
+    const w = words.find((x) => x.id === save.dataset.save);
+    if (!w) return;
+    const src = $("editSrc").value.trim();
+    const dst = $("editDst").value.trim();
+    if (!src || !dst) {
+      showToast("Kelime ve çeviri boş olamaz");
+      return;
+    }
+    const before = { ...w };
+    w.src = src;
+    w.dst = dst;
+    w.note = $("editNote").value.trim();
+    w.tags = $("editTags")
+      .value.split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    editingId = null;
+    persist();
+    renderWords();
+    showToast("Kayıt güncellendi ✔", "↩ Geri al", () => {
+      Object.assign(w, before);
+      persist();
+      renderWords();
+    });
+    return;
+  }
+
   const btn = e.target.closest("button[data-id]");
   if (!btn) return;
   const idx = words.findIndex((w) => w.id === btn.dataset.id);
@@ -573,6 +817,28 @@ $("wordList").addEventListener("click", (e) => {
 });
 
 $("searchInput").addEventListener("input", renderWords);
+$("sortSelect").addEventListener("change", renderWords);
+$("dirSelect").addEventListener("change", renderWords);
+
+$("tagFilters").addEventListener("click", (e) => {
+  const chip = e.target.closest("button[data-tag]");
+  if (!chip) return;
+  activeTag = activeTag === chip.dataset.tag ? null : chip.dataset.tag;
+  renderWords();
+});
+
+// Düzenleme alanlarında Enter kaydeder, Esc vazgeçer.
+$("wordList").addEventListener("keydown", (e) => {
+  if (!editingId || !e.target.classList.contains("edit-input")) return;
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const btn = $("wordList").querySelector("button[data-save]");
+    if (btn) btn.click();
+  } else if (e.key === "Escape") {
+    editingId = null;
+    renderWords();
+  }
+});
 $("clearAllBtn").addEventListener("click", () => {
   if (!words.length || !confirm("Tüm kayıtlı kelimeler silinsin mi?")) return;
   const backup = words;
@@ -591,6 +857,31 @@ let deck = [];
 let cardIndex = 0;
 let session = { right: 0, wrong: 0 };
 
+// Aralıklı tekrar basamakları (gün). Bildikçe aralık uzar; bilinmeyen
+// kelime 0. basamağa döner ve yarın tekrar sorulur.
+const INTERVALS = [1, 3, 7, 16, 35, 90];
+
+function daysFromNow(n) {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + n);
+  return d.toISOString();
+}
+
+function isDue(w) {
+  return new Date(w.due) <= new Date();
+}
+
+// Liste satırında "bugün" / "3 gün sonra" gibi okunur bir etiket.
+function dueLabel(w) {
+  // Etiket isDue ile aynı şeyi söylemeli; yuvarlama kullanınca gece geç
+  // saatlerde "tekrar zamanı" yazıp deste boş çıkabiliyordu.
+  if (isDue(w)) return `<span class="due now">tekrar zamanı</span>`;
+  const diff = Math.ceil((new Date(w.due) - new Date()) / 86400000);
+  if (diff <= 1) return `<span class="due">yarın</span>`;
+  return `<span class="due">${diff} gün sonra</span>`;
+}
+
 // Zorlanılan kelimeler öne gelsin: yanlış sayısı ağırlık, doğru sayısı
 // ceza. Sıralamayı tamamen belirlemesin diye rastgelelik ekliyoruz.
 function studyWeight(w) {
@@ -602,17 +893,36 @@ function setStudyButtons(on) {
   $("dontKnowBtn").hidden = !on;
 }
 
-$("startStudyBtn").addEventListener("click", () => {
+// Sekmeye girince "bugün kaç kelime bekliyor" özeti.
+function renderStudySummary() {
+  const due = words.filter(isDue).length;
+  const el = $("studySummary");
   if (words.length === 0) {
-    showToast("Önce kelime kaydetmelisin!");
+    el.textContent = "";
+    $("dueStudyBtn").disabled = true;
     return;
   }
-  deck = [...words].sort((a, b) => studyWeight(b) - studyWeight(a));
+  $("dueStudyBtn").disabled = due === 0;
+  el.innerHTML =
+    due > 0
+      ? `📅 Bugün tekrar edilecek <b>${due}</b> kelime var (toplam ${words.length}).`
+      : `✨ Bugünlük tekrar bitti — toplam ${words.length} kelime kayıtlı.`;
+}
+
+function startDeck(list) {
+  if (list.length === 0) {
+    showToast("Çalışılacak kelime yok!");
+    return;
+  }
+  deck = [...list].sort((a, b) => studyWeight(b) - studyWeight(a));
   cardIndex = 0;
   session = { right: 0, wrong: 0 };
   setStudyButtons(true);
   showCard();
-});
+}
+
+$("startStudyBtn").addEventListener("click", () => startDeck(words));
+$("dueStudyBtn").addEventListener("click", () => startDeck(words.filter(isDue)));
 
 function showCard() {
   const w = deck[cardIndex];
@@ -625,9 +935,19 @@ function showCard() {
   $("fcBack").innerHTML = `<span class="label">Cevap</span><span class="answer">${esc(w.dst)}</span>`;
 }
 
-$("flashcard").addEventListener("click", () => {
+function flipCard() {
   if (deck.length === 0) return;
   $("flashcard").classList.toggle("flipped");
+}
+
+$("flashcard").addEventListener("click", flipCard);
+
+// Kart bir <div> olduğu için klavye desteğini elle veriyoruz.
+$("flashcard").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    flipCard();
+  }
 });
 
 // Kartı değerlendirir, sonucu kelimeye işler ve sonrakine geçer.
@@ -637,8 +957,14 @@ function grade(correct) {
   // Deste kopya bir dizi; asıl kaydı id ile bulup güncelliyoruz.
   const w = words.find((x) => x.id === card.id);
   if (w) {
-    if (correct) w.right++;
-    else w.wrong++;
+    if (correct) {
+      w.right++;
+      w.level = Math.min(w.level + 1, INTERVALS.length - 1);
+    } else {
+      w.wrong++;
+      w.level = 0; // bilemediysen en başa dön
+    }
+    w.due = daysFromNow(INTERVALS[w.level]);
     persist();
   }
   session[correct ? "right" : "wrong"]++;
@@ -652,6 +978,7 @@ function grade(correct) {
     setStudyButtons(false);
     deck = [];
     session = { right: 0, wrong: 0 };
+    renderStudySummary();
     return;
   }
   showCard();
@@ -707,10 +1034,56 @@ function spawnParticles(count) {
   }
 }
 
+// ---------- Çevrimdışı durumu ----------
+// Çeviri internet ister; defter ve çalışma modu istemez. Kullanıcı bunu
+// bilsin diye bağlantı kesilince şerit gösteriyoruz.
+function renderOnlineState() {
+  const off = !navigator.onLine;
+  $("offlineBanner").hidden = !off;
+  $("sourceText").placeholder = off
+    ? "Çevrimdışısınız — kelime defteri ve çalışma modu çalışır"
+    : "Yazmaya başlayın, çeviri otomatik gelir...";
+}
+
+window.addEventListener("online", renderOnlineState);
+window.addEventListener("offline", renderOnlineState);
+
+// ---------- Uygulamayı yükleme (PWA) ----------
+let installPrompt = null;
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  $("installBtn").hidden = false;
+});
+
+$("installBtn").addEventListener("click", async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  const { outcome } = await installPrompt.userChoice;
+  installPrompt = null;
+  $("installBtn").hidden = true;
+  if (outcome === "accepted") showToast("Uygulama yüklendi ✔");
+});
+
+window.addEventListener("appinstalled", () => {
+  $("installBtn").hidden = true;
+});
+
 // ---------- İlk yükleme ----------
 spawnParticles(26);
 Store.save(words);
 $("wordCount").textContent = words.length;
 updateToolButtons();
 renderBackupStatus();
+renderOnlineState();
+renderStudySummary();
 Backup.init(() => words);
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("sw.js")
+      .catch((err) => console.error("Service worker kaydedilemedi:", err));
+  });
+}

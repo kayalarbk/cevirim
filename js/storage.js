@@ -24,6 +24,12 @@ const Store = {
       date: w.date || new Date().toISOString(),
       right: Number.isFinite(w.right) ? w.right : 0,
       wrong: Number.isFinite(w.wrong) ? w.wrong : 0,
+      note: typeof w.note === "string" ? w.note : "",
+      tags: Array.isArray(w.tags) ? w.tags.filter((t) => typeof t === "string") : [],
+      // Aralıklı tekrar: kelimenin kaçıncı basamakta olduğu ve bir sonraki
+      // tekrar tarihi. Yeni kayıtlar hemen tekrar edilebilir.
+      level: Number.isFinite(w.level) ? w.level : 0,
+      due: w.due || new Date().toISOString(),
     };
   },
 

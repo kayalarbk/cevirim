@@ -68,21 +68,46 @@ const API = {
     };
   },
 
+  // İkinci yedek: açık kaynak LibreTranslate örneği. Sözlük/örnek
+  // döndürmez ama Google ve MyMemory birlikte düşerse çeviri sürer.
+  async libreTranslate(text, from, to) {
+    const res = await fetch("https://translate.disroot.org/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ q: text, source: from, target: to, format: "text" }),
+    });
+    if (!res.ok) throw new Error("Yedek çeviri servisi yanıt vermedi");
+    const data = await res.json();
+    if (!data.translatedText) throw new Error("Boş çeviri döndü");
+    return { translated: data.translatedText, meanings: [], examples: [] };
+  },
+
   async translate(text, from, to) {
     const key = `${from}|${to}|${text}`;
     const cached = this._cacheGet(key);
     if (cached) return cached;
 
-    let result;
-    try {
-      result = await this.googleTranslate(text, from, to);
-    } catch (err) {
-      // Google'ın kotası/erişimi kapandıysa yedeğe düş; o da patlarsa
-      // kullanıcıya daha anlamlı olan yedek servisin hatasını göster.
-      result = await this.myMemory(text, from, to);
+    if (!navigator.onLine) {
+      throw new Error("İnternet bağlantısı yok — çeviri için çevrimiçi olmalısınız");
     }
-    this._cacheSet(key, result);
-    return result;
+
+    // Sırayla dene; hepsi düşerse kullanıcıya son servisin hatasını göster.
+    const providers = [
+      (t, f, o) => this.googleTranslate(t, f, o),
+      (t, f, o) => this.myMemory(t, f, o),
+      (t, f, o) => this.libreTranslate(t, f, o),
+    ];
+    let lastErr;
+    for (const provider of providers) {
+      try {
+        const result = await provider(text, from, to);
+        this._cacheSet(key, result);
+        return result;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error("Hiçbir çeviri servisi yanıt vermedi");
   },
 
   // Yazılmakta olan kelime için tamamlama tahmini (yalnızca İngilizce destekler).
