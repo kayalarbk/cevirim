@@ -298,17 +298,26 @@ function renderDetails(meanings, examples) {
 // ---------- Kaydetme ----------
 $("saveBtn").addEventListener("click", () => {
   if (!lastTranslation) return;
+  // Aynı kelimenin farklı çevirisi ayrı bir kayıttır ("run → koşmak" ve
+  // "run → çalıştırmak" gibi); bu yüzden kaynak+çeviri çiftine bakıyoruz.
   const exists = words.some(
     (w) =>
       w.src.toLowerCase() === lastTranslation.src.toLowerCase() &&
+      w.dst.toLowerCase() === lastTranslation.dst.toLowerCase() &&
       w.from === lastTranslation.from
   );
   if (exists) {
-    showToast("Bu kelime zaten kayıtlı 📝");
+    showToast("Bu çeviri zaten kayıtlı 📝");
     return;
   }
-  words.unshift({ ...lastTranslation, date: new Date().toISOString() });
-  persist();
+  words.unshift(
+    Store.normalize({ ...lastTranslation, date: new Date().toISOString() })
+  );
+  if (!persist()) {
+    words.shift(); // yazılamadıysa listeyi eski haline döndür
+    $("wordCount").textContent = words.length;
+    return;
+  }
   showToast("Kelime kaydedildi ✔");
   $("saveBtn").disabled = true;
   const badge = $("wordCount");
@@ -318,9 +327,199 @@ $("saveBtn").addEventListener("click", () => {
 });
 
 function persist() {
-  Store.save(words);
+  const ok = Store.save(words);
   $("wordCount").textContent = words.length;
+  if (!ok) {
+    showToast("⚠ Tarayıcı hafızasına yazılamadı! Yedeği kontrol edin.");
+    return false;
+  }
+  Backup.markDirty();
+  return true;
 }
+
+// ---------- Otomatik yedekleme ----------
+function fmtTime(d) {
+  return d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function renderBackupStatus(err) {
+  const dot = $("backupDot");
+  const text = $("backupStatus");
+  const show = (id, on) => ($(id).hidden = !on);
+  const only = (...visible) => {
+    ["backupChooseBtn", "backupResumeBtn", "backupConfirmBtn", "backupNowBtn", "backupStopBtn"]
+      .forEach((id) => show(id, visible.includes(id)));
+  };
+  const file = Backup.fileName ? ` · ${Backup.fileName}` : "";
+
+  if (!Backup.supported) {
+    dot.className = "backup-dot off";
+    text.textContent = "Bu tarayıcı otomatik yedeklemeyi desteklemiyor — elle indirin";
+    $("backupChooseBtn").textContent = "⤓ Yedeği indir";
+    only("backupChooseBtn");
+    $("permBanner").hidden = true;
+    return;
+  }
+
+  if (Backup.needsPermission) {
+    dot.className = "backup-dot warn";
+    text.textContent = "Yedek dosyasına erişim izni gerekiyor" + file;
+    only("backupResumeBtn", "backupStopBtn");
+    if (!bannerDismissed) $("permBanner").hidden = false;
+    return;
+  }
+
+  $("permBanner").hidden = true;
+
+  // Kazara silme koruması devrede: yedek dosyası olduğu gibi duruyor.
+  if (Backup.guard) {
+    dot.className = "backup-dot warn";
+    text.textContent = `⚠ Yedek korumaya alındı — liste ${Backup.guard.from} kelimeden ${Backup.guard.to}'e düştü, dosyaya yazılmadı`;
+    only("backupConfirmBtn", "backupStopBtn");
+    return;
+  }
+
+  if (Backup.active) {
+    dot.className = err ? "backup-dot warn" : "backup-dot on";
+    text.textContent = err
+      ? "Son yedekleme başarısız — tekrar deneyin" + file
+      : Backup.lastSaved
+      ? `Yedekleme açık${file} · ${Backup.lastCount} kelime · son kayıt ${fmtTime(Backup.lastSaved)}`
+      : `Yedekleme açık${file}`;
+    only("backupNowBtn", "backupStopBtn");
+    return;
+  }
+
+  dot.className = "backup-dot off";
+  text.textContent = "Otomatik yedekleme kapalı";
+  $("backupChooseBtn").textContent = "💾 Yedek dosyası seç";
+  only("backupChooseBtn");
+}
+
+let bannerDismissed = false;
+
+$("bannerCloseBtn").addEventListener("click", () => {
+  bannerDismissed = true;
+  $("permBanner").hidden = true;
+});
+
+$("bannerResumeBtn").addEventListener("click", async () => {
+  const ok = await Backup.resume();
+  showToast(ok ? "Yedekleme sürüyor ✔" : "İzin verilmedi");
+});
+
+$("backupConfirmBtn").addEventListener("click", async () => {
+  const ok = await Backup.confirmGuard();
+  showToast(ok ? "Yedek güncellendi ✔" : "Yedeklenemedi 😕");
+});
+
+Backup.onStatus = renderBackupStatus;
+
+$("backupChooseBtn").addEventListener("click", async () => {
+  if (!Backup.supported) {
+    Backup.download(words);
+    showToast("Yedek indirildi ⤓");
+    return;
+  }
+  try {
+    await Backup.choose();
+    showToast("Otomatik yedekleme açıldı ✔");
+  } catch (err) {
+    if (err.name !== "AbortError") showToast("Dosya seçilemedi 😕");
+  }
+});
+
+$("backupResumeBtn").addEventListener("click", async () => {
+  const ok = await Backup.resume();
+  showToast(ok ? "Yedekleme sürüyor ✔" : "İzin verilmedi");
+});
+
+$("backupNowBtn").addEventListener("click", async () => {
+  const ok = await Backup.writeNow();
+  showToast(ok ? "Yedeklendi ✔" : "Yedeklenemedi 😕");
+});
+
+$("backupStopBtn").addEventListener("click", async () => {
+  await Backup.stop();
+  showToast("Otomatik yedekleme kapatıldı");
+});
+
+$("restoreBtn").addEventListener("click", () => $("restoreInput").click());
+
+$("restoreInput").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = ""; // aynı dosya tekrar seçilebilsin
+  if (!file) return;
+  let incoming;
+  try {
+    incoming = await Backup.read(file);
+  } catch (err) {
+    showToast("⚠ Geçersiz yedek dosyası");
+    return;
+  }
+  const key = (w) => w.from + "|" + w.src.toLowerCase() + "|" + w.dst.toLowerCase();
+  const have = new Set(words.map(key));
+  const fresh = incoming.filter((w) => !have.has(key(w)));
+
+  // İki seçenek: mevcut listeye ekleme (güvenli) veya listeyi tamamen
+  // yedektekiyle değiştirme. Değiştirme veri sildiği için ayrıca onaylanır.
+  const msg =
+    `Yedekte ${incoming.length} kelime var, bunların ${fresh.length} tanesi listenizde yok.\n\n` +
+    `TAMAM: eksik ${fresh.length} kelimeyi ekle (mevcutlar korunur)\n` +
+    `İPTAL: hiçbir şey yapma`;
+
+  if (fresh.length === 0 && incoming.length) {
+    if (
+      confirm(
+        `Yedekteki tüm kelimeler zaten listenizde.\n\n` +
+          `Listeyi tamamen yedektekiyle DEĞİŞTİRMEK ister misiniz? ` +
+          `Mevcut ${words.length} kaydınızın yerini yedekteki ${incoming.length} kayıt alır.`
+      )
+    ) {
+      applyRestore(incoming, true);
+    }
+    return;
+  }
+  if (!confirm(msg)) return;
+
+  // Ekleme yapıldıktan sonra, yedeği "tek doğru kaynak" saymak isteyenlere
+  // tam değiştirme seçeneğini de sun.
+  if (
+    words.length > 0 &&
+    confirm(
+      `Bunun yerine listeyi tamamen yedektekiyle DEĞİŞTİRMEK ister misiniz?\n\n` +
+        `TAMAM: mevcut ${words.length} kayıt silinip yedekteki ${incoming.length} kayıt yazılır\n` +
+        `İPTAL: sadece eksik ${fresh.length} kelime eklenir`
+    )
+  ) {
+    applyRestore(incoming, true);
+    return;
+  }
+  applyRestore(fresh, false);
+});
+
+function applyRestore(list, replace) {
+  const before = words;
+  words = replace ? list.slice() : list.concat(words);
+  persist();
+  renderWords();
+  showToast(
+    replace ? `Liste yedekle değiştirildi (${words.length}) ✔` : `${list.length} kelime eklendi ✔`,
+    "↩ Geri al",
+    () => {
+      words = before;
+      persist();
+      renderWords();
+    }
+  );
+}
+
+// Sekme gizlenirken bekleyen yazmayı kaçırmamak için hemen yaz.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && Backup.active && Backup.pending) {
+    Backup.writeNow();
+  }
+});
 
 // ---------- Kelimelerim ----------
 function renderWords() {
@@ -339,52 +538,79 @@ function renderWords() {
   }
   list.innerHTML = filtered
     .map((w, i) => {
-      const idx = words.indexOf(w);
       const d = new Date(w.date);
+      const score =
+        w.right || w.wrong
+          ? ` · <span class="score">✔${w.right} ✘${w.wrong}</span>`
+          : "";
       return `<div class="word-item" style="animation-delay:${Math.min(i * 0.04, 0.4)}s">
         <div class="pair">
           <div class="src">${esc(w.src)} <span class="arrow">→</span> <span class="dst">${esc(w.dst)}</span></div>
-          <div class="meta">${w.from === "en" ? "EN → TR" : "TR → EN"} · ${d.toLocaleDateString("tr-TR")}</div>
+          <div class="meta">${w.from === "en" ? "EN → TR" : "TR → EN"} · ${d.toLocaleDateString("tr-TR")}${score}</div>
         </div>
-        <button title="Sil" aria-label="${esc(w.src)} kelimesini sil" data-idx="${idx}">🗑</button>
+        <button title="Sil" aria-label="${esc(w.src)} kelimesini sil" data-id="${esc(w.id)}">🗑</button>
       </div>`;
     })
     .join("");
 }
 
 // Silme işlemleri liste kapsayıcısında dinlenir; böylece satır HTML'ine
-// inline onclick gömmek gerekmez.
+// inline onclick gömmek gerekmez. Dizin yerine id kullanmak, arama
+// filtresi açıkken yanlış satırın silinmesini engeller.
 $("wordList").addEventListener("click", (e) => {
-  const btn = e.target.closest("button[data-idx]");
+  const btn = e.target.closest("button[data-id]");
   if (!btn) return;
-  const idx = Number(btn.dataset.idx);
-  if (!Number.isInteger(idx) || idx < 0 || idx >= words.length) return;
-  words.splice(idx, 1);
+  const idx = words.findIndex((w) => w.id === btn.dataset.id);
+  if (idx === -1) return;
+  const [removed] = words.splice(idx, 1);
   persist();
   renderWords();
+  showToast(`"${removed.src}" silindi`, "↩ Geri al", () => {
+    words.splice(Math.min(idx, words.length), 0, removed);
+    persist();
+    renderWords();
+  });
 });
 
 $("searchInput").addEventListener("input", renderWords);
 $("clearAllBtn").addEventListener("click", () => {
-  if (words.length && confirm("Tüm kayıtlı kelimeler silinsin mi?")) {
-    words = [];
+  if (!words.length || !confirm("Tüm kayıtlı kelimeler silinsin mi?")) return;
+  const backup = words;
+  words = [];
+  persist();
+  renderWords();
+  showToast(`${backup.length} kelime silindi`, "↩ Geri al", () => {
+    words = backup;
     persist();
     renderWords();
-  }
+  });
 });
 
 // ---------- Çalışma modu (3D kart çevirme) ----------
 let deck = [];
 let cardIndex = 0;
+let session = { right: 0, wrong: 0 };
+
+// Zorlanılan kelimeler öne gelsin: yanlış sayısı ağırlık, doğru sayısı
+// ceza. Sıralamayı tamamen belirlemesin diye rastgelelik ekliyoruz.
+function studyWeight(w) {
+  return w.wrong * 2 - w.right + Math.random() * 1.5;
+}
+
+function setStudyButtons(on) {
+  $("knowBtn").hidden = !on;
+  $("dontKnowBtn").hidden = !on;
+}
 
 $("startStudyBtn").addEventListener("click", () => {
   if (words.length === 0) {
     showToast("Önce kelime kaydetmelisin!");
     return;
   }
-  deck = [...words].sort(() => Math.random() - 0.5);
+  deck = [...words].sort((a, b) => studyWeight(b) - studyWeight(a));
   cardIndex = 0;
-  $("nextCardBtn").disabled = false;
+  session = { right: 0, wrong: 0 };
+  setStudyButtons(true);
   showCard();
 });
 
@@ -404,29 +630,65 @@ $("flashcard").addEventListener("click", () => {
   $("flashcard").classList.toggle("flipped");
 });
 
-$("nextCardBtn").addEventListener("click", () => {
+// Kartı değerlendirir, sonucu kelimeye işler ve sonrakine geçer.
+function grade(correct) {
+  if (deck.length === 0) return;
+  const card = deck[cardIndex];
+  // Deste kopya bir dizi; asıl kaydı id ile bulup güncelliyoruz.
+  const w = words.find((x) => x.id === card.id);
+  if (w) {
+    if (correct) w.right++;
+    else w.wrong++;
+    persist();
+  }
+  session[correct ? "right" : "wrong"]++;
+
   cardIndex++;
   if (cardIndex >= deck.length) {
-    $("fcFront").innerHTML = `<span>🎉 Tebrikler, desteyi bitirdin!</span><span class="label">Tekrar için "Karıştır ve Başla"</span>`;
+    $("fcFront").innerHTML = `<span>🎉 Deste bitti — ${session.right} doğru / ${session.wrong} yanlış</span><span class="label">Tekrar için "Karıştır ve Başla"</span>`;
     $("fcBack").innerHTML = "";
     $("flashcard").classList.remove("flipped");
     $("studyProgress").textContent = "";
-    $("nextCardBtn").disabled = true;
+    setStudyButtons(false);
     deck = [];
+    session = { right: 0, wrong: 0 };
     return;
   }
   showCard();
-});
+}
+
+$("knowBtn").addEventListener("click", () => grade(true));
+$("dontKnowBtn").addEventListener("click", () => grade(false));
 
 // ---------- Bildirim ----------
 let toastTimer;
-function showToast(msg) {
+let toastHandler = null;
+
+// action verilirse toast'ta tıklanabilir bir buton çıkar (örn. "Geri al").
+function showToast(msg, action, onAction) {
   const t = $("toast");
-  t.textContent = msg;
+  const btn = $("toastAction");
+  $("toastMsg").textContent = msg;
+  toastHandler = onAction || null;
+  btn.hidden = !action;
+  if (action) btn.textContent = action;
   t.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+  toastTimer = setTimeout(hideToast, action ? 6000 : 2200);
 }
+
+function hideToast() {
+  clearTimeout(toastTimer);
+  $("toast").classList.remove("show");
+  $("toastAction").hidden = true;
+  toastHandler = null;
+}
+
+$("toastAction").addEventListener("click", () => {
+  const fn = toastHandler;
+  hideToast();
+  if (fn) fn();
+});
 
 // ---------- Arka plan parçacıkları (yıldız tozu) ----------
 function spawnParticles(count) {
@@ -447,5 +709,8 @@ function spawnParticles(count) {
 
 // ---------- İlk yükleme ----------
 spawnParticles(26);
-persist();
+Store.save(words);
+$("wordCount").textContent = words.length;
 updateToolButtons();
+renderBackupStatus();
+Backup.init(() => words);

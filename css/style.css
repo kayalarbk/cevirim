@@ -428,6 +428,102 @@ textarea#sourceText::placeholder { color: var(--muted); }
   box-shadow: none;
 }
 .btn-danger:hover:not(:disabled) { background: rgba(255, 123, 123, 0.12); box-shadow: none; }
+.btn-soft {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: none;
+  padding: 9px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.btn-soft:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); box-shadow: none; }
+
+/* ============================================================
+   OTOMATİK YEDEKLEME ÇUBUĞU
+   ============================================================ */
+.backup-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+.backup-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+.backup-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.backup-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--muted);
+}
+.backup-dot.on {
+  background: #4ade80;
+  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.6);
+  animation: backupPulse 2.4s infinite;
+}
+.backup-dot.warn { background: #fbbf24; }
+.backup-dot.off { background: rgba(255, 255, 255, 0.25); }
+@keyframes backupPulse {
+  70% { box-shadow: 0 0 0 8px rgba(74, 222, 128, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .backup-dot.on { animation: none; }
+}
+
+/* İzin yenileme şeridi (sayfanın en üstü) */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 5;
+  padding: 12px 18px;
+  background: rgba(251, 191, 36, 0.14);
+  border-bottom: 1px solid rgba(251, 191, 36, 0.35);
+  backdrop-filter: blur(10px);
+}
+.banner[hidden] { display: none; }
+.banner-text { flex: 1; min-width: 220px; font-size: 0.9rem; color: var(--text); }
+.banner-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.banner-close:hover { color: var(--text); }
+
+/* Kelime satırındaki çalışma skoru */
+.word-item .score { white-space: nowrap; }
+
+/* Geri al butonlu bildirim */
+.toast-action {
+  background: rgba(255, 255, 255, 0.16);
+  border: none;
+  border-radius: 999px;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  padding: 5px 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.toast-action:hover { background: rgba(255, 255, 255, 0.28); }
+.toast-action[hidden] { display: none; }
 
 .hint { color: var(--muted); font-size: 0.85rem; margin-top: 14px; line-height: 1.5; }
 .hint b { color: var(--text); }
@@ -606,6 +702,9 @@ textarea#sourceText::placeholder { color: var(--muted); }
    ============================================================ */
 .toast {
   position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   bottom: 26px;
   left: 50%;
   transform: translateX(-50%) translateY(90px);
