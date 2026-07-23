@@ -1,13 +1,13 @@
 /* ============================================================
    check.js — cümle doğruluk kontrol motoru
 
-   İki katman birlikte çalışır:
-   1) Yerel kural katmanı — sık yapılan yazım yanlışları, noktalama
-      ve biçim kuralları. İnternet gerektirmez, her dilde çalışır.
-   2) LanguageTool genel API'si — dilbilgisi denetimi. Yalnızca
-      desteklediği diller (İngilizce, İtalyanca) için ve çevrimiçiyken.
-      Türkçe LanguageTool'da desteklenmiyor; orada yalnızca yerel
-      katman devrededir.
+   Tamamen yerel bir kural motorudur: sık yapılan yazım yanlışları,
+   çok kelimeli kalıplar, noktalama ve biçim kuralları. İnternet
+   gerektirmez, üç dilde de aynı şekilde çalışır ve anında sonuç verir.
+
+   Not: Önceden dilbilgisi için LanguageTool genel API'si de çağrılıyordu.
+   Pratik olmadığı için kaldırıldı — Türkçeyi hiç desteklemiyordu, ücretsiz
+   uç noktanın istek sınırı vardı ve her denetim ağ gecikmesi ekliyordu.
 
    Dışa açılan tek giriş noktası:
        checkSentence(text, lang)
@@ -16,17 +16,6 @@
    ============================================================ */
 
 const Check = {
-  // Son çalıştırmada hangi kaynakların kullanıldığı (arayüzde not olarak
-  // gösterilir). Dönüş nesnesini sözleşmede yazılı üç alanla sınırlı
-  // tutmak için burada saklanıyor.
-  lastSource: "yerel",
-
-  LT_URL: "https://api.languagetool.org/v2/check",
-  LT_LANG: { en: "en-US", it: "it" },
-
-  _cache: new Map(),
-  _CACHE_MAX: 60,
-
   // ---------- Sık yapılan yazım yanlışları (tek kelimelik) ----------
   DICT: {
     tr: {
@@ -238,43 +227,11 @@ const Check = {
     ];
   },
 
-  // ---------- LanguageTool ----------
-  LT_TYPE: {
-    misspelling: "yazım",
-    typographical: "noktalama",
-    whitespace: "biçim",
-    style: "biçim",
-    grammar: "dilbilgisi",
-    duplication: "dilbilgisi",
-    inconsistency: "biçim",
-  },
-
-  async remote(text, lang) {
-    const code = this.LT_LANG[lang];
-    if (!code || !navigator.onLine) return null;
-    const res = await fetch(this.LT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ text, language: code, enabledOnly: "false" }),
-    });
-    if (!res.ok) throw new Error("Dilbilgisi servisi yanıt vermedi");
-    const data = await res.json();
-    return (data.matches || [])
-      .map((m) => ({
-        index: m.offset,
-        wrong: text.substr(m.offset, m.length),
-        suggestion: (m.replacements && m.replacements[0] && m.replacements[0].value) || "",
-        type: this.LT_TYPE[m.rule && m.rule.issueType] || "dilbilgisi",
-      }))
-      // Uzunluğu sıfır olan eşleşmeler vurgulanamaz; atlanır.
-      .filter((e) => e.wrong);
-  },
-
-  // Yerel ve uzak sonuçlar çakışabilir (ikisi de aynı kelimeyi işaretler).
-  // Konuma göre sıralayıp üst üste binenleri eliyoruz; yerel bulgular
-  // önce eklendiği için önceliklidir.
-  merge(local, remote) {
-    const all = [...local, ...remote].sort((a, b) => a.index - b.index);
+  // Farklı kurallar aynı yeri işaretleyebilir (örneğin hem yazım hem
+  // biçim). Konuma göre sıralayıp üst üste binenleri eliyoruz; kurallar
+  // localErrors içinde öncelik sırasına göre eklenir.
+  merge(errors) {
+    const all = [...errors].sort((a, b) => a.index - b.index);
     const out = [];
     let end = -1;
     for (const e of all) {
@@ -296,50 +253,21 @@ const Check = {
     return out;
   },
 
-  async run(text, lang) {
+  run(text, lang) {
     const clean = String(text == null ? "" : text);
-    if (!clean.trim()) {
-      this.lastSource = "yerel";
-      return { correct: true, errors: [], correctedText: clean };
-    }
+    if (!clean.trim()) return { correct: true, errors: [], correctedText: clean };
 
-    const key = `${lang}|${clean}`;
-    if (this._cache.has(key)) {
-      const hit = this._cache.get(key);
-      this.lastSource = hit.source;
-      return hit.result;
-    }
-
-    const local = this.localErrors(clean, lang);
-    let remote = [];
-    let source = this.LT_LANG[lang] ? "yerel" : "yalnız-yerel";
-    try {
-      const r = await this.remote(clean, lang);
-      if (r) {
-        remote = r;
-        source = "tam";
-      }
-    } catch {
-      source = "yerel-hata"; // servis düştü; yerel kurallarla devam
-    }
-
-    const errors = this.merge(local, remote);
-    const result = {
+    const errors = this.merge(this.localErrors(clean, lang));
+    return {
       correct: errors.length === 0,
       errors,
       correctedText: this.applyAll(clean, errors),
     };
-
-    this._cache.set(key, { result, source });
-    if (this._cache.size > this._CACHE_MAX) {
-      this._cache.delete(this._cache.keys().next().value);
-    }
-    this.lastSource = source;
-    return result;
   },
 };
 
-// Sözleşmeli giriş noktası.
+// Sözleşmeli giriş noktası. Denetim artık tamamen yerel ve anlık; yine de
+// söz (Promise) döndürüyor, böylece çağıran taraflar değişmiyor.
 async function checkSentence(text, lang) {
   return Check.run(text, lang);
 }

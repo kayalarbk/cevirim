@@ -770,13 +770,7 @@ async function runCheck(auto) {
 }
 
 function checkNote(lang) {
-  if (lang === "tr") {
-    return "Türkçe için yerel yazım ve noktalama kuralları kullanıldı (dilbilgisi servisi Türkçe desteklemiyor).";
-  }
-  if (Check.lastSource === "tam") {
-    return "LanguageTool dilbilgisi denetimi + yerel yazım kuralları.";
-  }
-  return "Dilbilgisi servisine ulaşılamadı; yalnızca yerel yazım ve noktalama kuralları uygulandı.";
+  return `${langName(lang)} yazım, noktalama ve biçim kuralları uygulandı — denetim tümüyle cihazınızda çalışır, çevrimdışı da geçerlidir.`;
 }
 
 function renderCheck(text, res) {

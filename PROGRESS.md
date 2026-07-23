@@ -17,6 +17,19 @@ telefona veya masaüstüne yüklenebilir ve çevrimdışı açılır.
 
 ## Tamamlanan işler (en yeni üstte)
 
+### 2026-07-23 — LanguageTool kaldırıldı, denetim tümüyle yerel
+- `js/check.js` içinden LanguageTool çağrısı, tür eşlemesi ve sonuç
+  önbelleği çıkarıldı; motor artık yalnızca yerel kural katmanından oluşuyor
+  ve anında (ağ beklemeden) sonuç veriyor.
+- Gerekçe: Türkçeyi hiç desteklemiyordu, ücretsiz uç noktanın dakikalık
+  istek sınırı vardı ve her denetime ağ gecikmesi ekliyordu.
+- `checkSentence(text, lang)` sözleşmesi aynı kaldı (hâlâ `async`), çağıran
+  taraflar değişmedi. Panel notu "denetim tümüyle cihazınızda çalışır"
+  şeklinde güncellendi.
+- Kayıp: dilbilgisi denetimi (EN/IT'de "She go" → "She goes" gibi). Yazım,
+  noktalama ve biçim denetimi üç dilde de aynen sürüyor — test cümlelerinde
+  düzeltilmiş çıktılar birebir korundu.
+
 ### 2026-07-23 — Round-trip doğrulama ve takasta yeniden çeviri
 
 **A. Arka planda round-trip doğrulama ("Akıllı düzeltme", varsayılan AÇIK)**
@@ -65,11 +78,10 @@ elle **✓ Kontrol Et**'e basarsa ayrıntılı panel açılır ve şerit kapanı
 **2. Cümle doğruluk kontrol motoru**
 - `js/check.js` eklendi. Sözleşme: `checkSentence(text, lang)` →
   `{ correct, errors: [{ index, wrong, suggestion, type }], correctedText }`.
-- İki katman: (a) yerel kural motoru — dile özel yazım yanlışı sözlükleri,
-  çok kelimeli kalıplar, noktalama/biçim kuralları, cümle başı büyük harf,
-  cümle sonu noktalama; (b) LanguageTool genel API'si (EN ve IT için,
-  çevrimiçiyken). Türkçe LanguageTool'da desteklenmediği için yalnızca yerel
-  katman çalışır ve panelde bu belirtilir.
+- Yerel kural motoru: dile özel yazım yanlışı sözlükleri, çok kelimeli
+  kalıplar, noktalama/biçim kuralları, cümle başı büyük harf, cümle sonu
+  noktalama. (İlk sürümde ayrıca LanguageTool API'si çağrılıyordu;
+  2026-07-23'te kaldırıldı — aşağıya bakınız.)
 - Arayüz: ayrı **✓ Kontrol Et** butonu, hatalı bölümlerde türe göre renkli
   dalgalı altı çizgi, üzerine gelince/dokununca açılan öneri baloncuğu,
   baloncuktan tek hatayı **Uygula**, üstten **✨ Düzeltilmiş hali uygula**.
@@ -160,7 +172,7 @@ cevirim/
 └── js/
     ├── langs.js        # Desteklenen diller tablosu (tek kaynak) — ilk yüklenir
     ├── api.js          # Dış servisler: Google Translate, MyMemory, Datamuse
-    ├── check.js        # Cümle doğruluk motoru: yerel kurallar + LanguageTool
+    ├── check.js        # Cümle doğruluk motoru — tümüyle yerel kurallar
     ├── storage.js      # localStorage kalıcılığı + kayıt normalizasyonu
     ├── backup.js       # File System Access API ile otomatik dosya yedeği
     └── app.js          # Tüm arayüz mantığı (sekmeler, çeviri, liste, çalışma)
@@ -185,7 +197,7 @@ Betik yükleme sırası önemlidir: `langs.js` → `api.js` → `check.js` →
 | Aralıklar 1/3/7/16/35/90 gün | Klasik Leitner benzeri artan aralık; ezber pekişsin | 2026-07-22 |
 | Status bar `black-translucent` | Koyu tema ile ekranın tepesine kadar uzanan bütünlüklü görünüm | 2026-07-23 |
 | Diller ayrı bir tabloda (`langs.js`) | Dil kodları koda serpiştirilmişti; yeni dil eklemek her dosyaya dokunmayı gerektiriyordu | 2026-07-23 |
-| Kontrol motoru iki katmanlı | LanguageTool Türkçe desteklemiyor ve çevrimdışıyken erişilemiyor; yerel kural katmanı her koşulda bir sonuç üretiyor | 2026-07-23 |
+| ~~Kontrol motoru iki katmanlı~~ → tek katman (yalnızca yerel) | LanguageTool Türkçeyi hiç desteklemiyordu, ücretsiz uç noktanın istek sınırı vardı ve her denetime ağ gecikmesi ekliyordu; pratik bulunmayıp kaldırıldı | 2026-07-23 |
 | Otomatik kontrol çeviriyle eşzamanlı (öncesinde değil) | Sıralı çalıştırmak çeviri gecikmesini iki katına çıkarıyordu; kullanıcı ikisini de aynı anda görüyor | 2026-07-23 |
 | Swap'ta yeniden çeviri yok | Her iki metin de elde; yeni istek hem gereksiz hem de kota tüketiyor | 2026-07-23 |
 | Bayat kontrol sonucu silinmez, soluklaştırılır | Kullanıcı yazmaya devam ederken önerileri okumayı sürdürebilsin; ama bayat konumlarla düzeltme uygulanmaz | 2026-07-23 |
@@ -208,9 +220,9 @@ Betik yükleme sırası önemlidir: `langs.js` → `api.js` → `check.js` →
    olduğu için şimdilik bilinçli olarak dışarıda bırakıldı.
 4. Kelime tamamlama tahmini (hayalet yazı) yalnızca İngilizce çalışıyor;
    Datamuse başka dil desteklemiyor, İtalyanca/Türkçe için başka kaynak gerek.
-5. LanguageTool ücretsiz API'sinin dakikalık istek sınırı var; otomatik
-   kontrol çok sık tetiklenirse 429 dönebilir (şu an 500 ms debounce + sonuç
-   önbelleği ile hafifletiliyor).
+5. Dilbilgisi denetimi (özne-yüklem uyumu, zaman hataları) artık hiçbir dilde
+   yok — LanguageTool kaldırıldı. İhtiyaç duyulursa yerel kural listesi
+   genişletilebilir.
 6. Kelime listesinde sayfalama veya sanal liste (kayıt sayısı büyürse).
 7. Çalışma modunda günlük hedef / seri (streak) göstergesi.
 8. `sw.js` güncellendiğinde kullanıcıya "yeni sürüm hazır, yenile" bildirimi.

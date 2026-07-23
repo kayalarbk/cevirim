@@ -6,7 +6,7 @@
 
 - **Üç dil, altı yön** — 🇬🇧 İngilizce, 🇹🇷 Türkçe ve 🇮🇹 İtalyanca arasında her yönde çeviri.
 - **Otomatik çeviri** — yazmayı bıraktığınızda çeviri kendiliğinden yapılır, buton yok.
-- **Cümle doğruluk kontrolü** — yazım ve dilbilgisi denetlenir; hatalar renkli altı çizgiyle işaretlenir, dokununca öneri çıkar, düzeltilmiş hali tek tıkla uygulanır. İsterseniz her çeviriyle birlikte otomatik çalışır.
+- **Cümle doğruluk kontrolü** — yazım, noktalama ve biçim denetlenir (tümüyle cihazda, internetsiz); hatalar renkli altı çizgiyle işaretlenir, dokununca öneri çıkar, düzeltilmiş hali tek tıkla uygulanır. İsterseniz her çeviriyle birlikte otomatik çalışır.
 - **Akıllı düzeltme** — çeviri bittikten sonra arka planda sessizce geri-çeviri yapılır; yazdığınızla arasında fark çıkarsa "Bunu mu demek istediniz: …" şeridi belirir ve tek tıkla uygulanır.
 - **Akıllı yön takası** — ⇄ ile yön değişince çeviri kaynak kutuya taşınır ve karşısında özgün metnin düzeltilmiş hali çıkar; özgün girişe "Geri getir" ile dönülür.
 - **Tek tıkla temizleme** — giriş kutusundaki ✕ metni ve sonuçlarını siler, "Geri al" ile aynen döner.
@@ -22,8 +22,7 @@
 |---|---|
 | Google Translate (ücretsiz uç nokta) | Çeviri, anlamlar, örnek cümleler |
 | MyMemory / LibreTranslate | Yedek çeviri servisleri |
-| LanguageTool | Dilbilgisi denetimi (İngilizce, İtalyanca) |
-| Yerel kural motoru (`js/check.js`) | Yazım/noktalama denetimi — Türkçe dahil, çevrimdışı da çalışır |
+| Yerel kural motoru (`js/check.js`) | Yazım/noktalama denetimi — üç dilde de, internetsiz çalışır |
 | Datamuse | Kelime tamamlama tahmini (yalnızca İngilizce) |
 
 ## Proje yapısı
