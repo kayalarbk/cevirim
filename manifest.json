@@ -2,7 +2,7 @@
   "name": "Çevirim — İngilizce ⇄ Türkçe",
   "short_name": "Çevirim",
   "description": "İngilizce-Türkçe çeviri ve kişisel kelime defteri",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0e1020",

@@ -31,6 +31,11 @@ body {
   color: var(--text);
   min-height: 100vh;
   overflow-x: hidden;
+  /* iPhone çentiği ve ana ekran çubuğu içeriğin üstüne binmesin
+     (status bar "black-translucent" olduğu için içerik ekranın en
+     tepesinden başlar). */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 /* ============================================================
@@ -831,7 +836,9 @@ textarea#sourceText::placeholder { color: var(--muted); }
   display: flex;
   align-items: center;
   gap: 12px;
-  bottom: 26px;
+  /* Sabit konumlu olduğu için body'nin güvenli alan dolgusundan
+     etkilenmez; home bar payını kendisi eklemeli. */
+  bottom: calc(26px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%) translateY(90px);
   background: var(--grad);

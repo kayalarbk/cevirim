@@ -7,7 +7,7 @@
    asla önbelleğe alınmaz — bayat çeviri göstermek yanıltıcı olur.
    ============================================================ */
 
-const CACHE = "cevirim-kabuk-v1";
+const CACHE = "cevirim-kabuk-v2";
 
 const SHELL = [
   "./",
