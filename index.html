@@ -79,9 +79,27 @@
         </div>
       </div>
 
+      <!-- Arka plan round-trip doğrulamasının önerisi -->
+      <div class="suggest-bar" id="suggestBar" hidden>
+        <span class="suggest-text">💡 Bunu mu demek istediniz: <b id="suggestText"></b></span>
+        <button class="btn btn-soft" id="suggestApplyBtn">Uygula</button>
+        <button class="banner-close" id="suggestCloseBtn" title="Kapat" aria-label="Öneriyi kapat">✕</button>
+      </div>
+
+      <!-- Takas sonrası orijinal girişe dönüş -->
+      <div class="suggest-bar revert" id="revertBar" hidden>
+        <span class="suggest-text">↔ Yön değiştirildi — özgün giriş: <b id="revertText"></b></span>
+        <button class="btn btn-soft" id="revertBtn">↩ Geri getir</button>
+        <button class="banner-close" id="revertCloseBtn" title="Kapat" aria-label="Şeridi kapat">✕</button>
+      </div>
+
       <div class="btn-row">
         <button class="btn" id="saveBtn" disabled>➕ Kelimeyi Kaydet</button>
         <button class="btn btn-soft" id="checkBtn" disabled>✓ Kontrol Et</button>
+        <label class="switch" title="Çeviri bittikten sonra arka planda geri-çeviri yapıp kaynak metindeki olası hataları bulur">
+          <input type="checkbox" id="smartFixToggle" autocomplete="off">
+          <span>Akıllı düzeltme</span>
+        </label>
         <label class="switch" title="Açıkken her otomatik çeviriyle birlikte cümle kontrolü de yapılır">
           <!-- autocomplete=off: tarayıcının form geri yüklemesi, kayıtlı
                tercihin üzerine yazmasın -->
@@ -116,7 +134,7 @@
         <div id="historyList"></div>
       </div>
 
-      <p class="hint">Yazmayı bıraktığınızda çeviri otomatik yapılır; veri internetten <b>Google Translate</b> (yedek: MyMemory) üzerinden alınır. Diller arasında <b>⇄</b> ile geçtiğinizde metinler de yer değiştirir, yeniden çeviri istenmez. <b>✓ Kontrol Et</b> cümlenin yazım ve dilbilgisini denetler; işaretli yerlere dokununca öneri görünür. İngilizce yazarken saydam kelime tahminini <b>Tab</b> ile tamamlayabilirsiniz. Kutuların sağ üstündeki <b>✕</b> temizler, <b>🔊</b> seslendirir, <b>📋</b> kopyalar.</p>
+      <p class="hint">Yazmayı bıraktığınızda çeviri otomatik yapılır; veri internetten <b>Google Translate</b> (yedek: MyMemory) üzerinden alınır. <b>Akıllı düzeltme</b> açıkken çeviri bittikten sonra arka planda sessizce geri-çeviri yapılır; yazdığınızla arasında fark çıkarsa "Bunu mu demek istediniz" şeridi belirir. <b>⇄</b> ile yön değiştirdiğinizde çeviri kaynak kutuya taşınır ve karşısında özgün metnin düzeltilmiş hali çıkar; özgün girişe "Geri getir" ile dönebilirsiniz. <b>✓ Kontrol Et</b> cümlenin yazım ve dilbilgisini denetler; işaretli yerlere dokununca öneri görünür. İngilizce yazarken saydam kelime tahminini <b>Tab</b> ile tamamlayabilirsiniz. Kutuların sağ üstündeki <b>✕</b> temizler, <b>🔊</b> seslendirir, <b>📋</b> kopyalar.</p>
     </div>
   </section>
 

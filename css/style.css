@@ -501,6 +501,33 @@ textarea#sourceText::placeholder { color: var(--muted); }
 .switch:hover { color: var(--text); }
 
 /* ============================================================
+   ÖNERİ ŞERİTLERİ (round-trip doğrulama / takas sonrası geri dönüş)
+   ============================================================ */
+.suggest-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 217, 142, 0.35);
+  border-left: 3px solid var(--gold);
+  border-radius: 12px;
+  background: rgba(255, 217, 142, 0.09);
+  animation: fadeInUp 0.35s ease both;
+}
+.suggest-bar[hidden] { display: none; }
+.suggest-text { flex: 1; min-width: 200px; font-size: 0.88rem; color: var(--muted); }
+.suggest-text b { color: var(--text); font-weight: 700; }
+.suggest-bar .btn-soft { padding: 7px 14px; font-size: 0.8rem; }
+/* Takas şeridi bilgilendirme amaçlı; daha sakin bir renkte */
+.suggest-bar.revert {
+  border-color: rgba(33, 212, 253, 0.3);
+  border-left-color: var(--secondary);
+  background: rgba(33, 212, 253, 0.07);
+}
+
+/* ============================================================
    CÜMLE DOĞRULUK KONTROLÜ
    ============================================================ */
 .check-panel {

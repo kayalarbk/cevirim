@@ -17,6 +17,38 @@ telefona veya masaüstüne yüklenebilir ve çevrimdışı açılır.
 
 ## Tamamlanan işler (en yeni üstte)
 
+### 2026-07-23 — Round-trip doğrulama ve takasta yeniden çeviri
+
+**A. Arka planda round-trip doğrulama ("Akıllı düzeltme", varsayılan AÇIK)**
+- Çeviri bittikten 600 ms sonra, sessizce ters yönde ikinci bir çeviri koşar
+  ("I have a big hause" → "Büyük bir evim var" → "I have a big house").
+- Geri gelen metin kullanıcının yazdığından anlamlı ölçüde farklıysa kutuların
+  altında engellemeyen bir şerit çıkar: *"💡 Bunu mu demek istediniz: …"* +
+  **Uygula**. Uygulamak **ek istek yapmaz** — hedef kutudaki metin zaten
+  düzeltilmiş kaynağın çevirisidir; düzeltilmiş metin ayrıca çeviri
+  önbelleğine tohumlanır (`API.seed`).
+- Ana çeviri asla gecikmez: doğrulama sonuç ekranda göründükten sonra başlar.
+- Ayar `localStorage`'da (`cevirim_smartfix`). Kapalıyken **tek bir round-trip
+  isteği bile atılmaz** (ağ sayacıyla doğrulandı).
+- Hata durumunda (çevrimdışı / 429 / servis) sessizce vazgeçilir.
+- Doğrulandı: EN→TR, TR→EN, EN→IT, TR→IT yönlerinde şerit çıkıyor; doğru
+  yazılmış cümlede çıkmıyor; TR→IT'de ASCII yazılmış Türkçeyi de düzeltiyor
+  ("bugun hava cok guzel" → "Bugün hava çok güzel").
+
+**B. Manuel swap'ta yeniden çeviri**
+- ⇄ artık: yönü çevirir, önceki çeviriyi kaynak kutuya taşır ve yeni kaynağı
+  yeniden çevirir — hedef kutuda özgün metnin **düzeltilmiş hali** belirir.
+- Round-trip önbelleği doluysa istek atılmaz (ölçüldü: **0 fetch**), boşsa
+  tek istek atılır (**1 fetch**) ve "Çevriliyor..." göstergesi görünür.
+- Özgün giriş "↩ Geri getir" şeridiyle erişilebilir kalır (geri dönüş de
+  ek istek yapmaz).
+- Ağ yoksa eski davranışa düşer (salt takas) ve küçük bir not gösterir.
+- Boş kutuda yalnızca yön değişir; art arda takaslar kararlı çalışır.
+
+**Tek uyarı kuralı:** round-trip şeridi ile cümle kontrol paneli aynı anda
+durmaz. Otomatik kontrol paneli açıkken şerit çıkarsa panel kapanır; kullanıcı
+elle **✓ Kontrol Et**'e basarsa ayrıntılı panel açılır ve şerit kapanır.
+
 ### 2026-07-23 — Geliştirme turu: İtalyanca, doğruluk motoru, swap, temizle
 
 **1. İtalyanca dil desteği**
@@ -157,6 +189,10 @@ Betik yükleme sırası önemlidir: `langs.js` → `api.js` → `check.js` →
 | Otomatik kontrol çeviriyle eşzamanlı (öncesinde değil) | Sıralı çalıştırmak çeviri gecikmesini iki katına çıkarıyordu; kullanıcı ikisini de aynı anda görüyor | 2026-07-23 |
 | Swap'ta yeniden çeviri yok | Her iki metin de elde; yeni istek hem gereksiz hem de kota tüketiyor | 2026-07-23 |
 | Bayat kontrol sonucu silinmez, soluklaştırılır | Kullanıcı yazmaya devam ederken önerileri okumayı sürdürebilsin; ama bayat konumlarla düzeltme uygulanmaz | 2026-07-23 |
+| Round-trip önerisinde eşik: kelime oranı değil **karakter benzerliği** (≥ 0,70) | Kelime oranı kısa cümlelerde gerçek düzeltmeleri eliyordu ("benim adim baris"da 2/3 = 0,67). Benzerlik, yazım hatasını (0,8–0,97) serbest çeviriden (< 0,5) net ayırıyor | 2026-07-23 |
+| Round-trip elenirse yazım denetimi yedeğe alınmaz | Denendi ve geri alındı: "my nme is baris" için "My me is basis" gibi özel isimleri bozan öneriler üretiyordu — sessiz kalmak daha iyi | 2026-07-23 |
+| Round-trip önbelleği ayrı tutuluyor (`rtCache`) | Takasın ihtiyaç duyduğu çeviri tam olarak geri-çeviridir; ayrı önbellek sayesinde takas anında senkron okunup "Çevriliyor..." titremesi yaşanmıyor | 2026-07-23 |
+| Swap artık yeniden çeviriyor (önceki turdaki "0 istek" kuralı değişti) | Kullanıcının yeni isteği: hedef kutuda özgün metnin düzeltilmiş hali görünsün. Önbellek sıcaksa yine 0 istek | 2026-07-23 |
 
 ---
 
@@ -187,6 +223,7 @@ Betik yükleme sırası önemlidir: `langs.js` → `api.js` → `check.js` →
 |---|---|---|
 | Açık | iOS Safari'de "Yedek dosyası seç" çalışmıyor | iPhone'da Kelimelerim → 💾 Yedek dosyası seç → API desteklenmediği için tepki yok |
 | Açık | Yedek dosyası izni sayfa yenilenince düşüyor | Yedek seç → sayfayı yenile → izin şeridi çıkıyor, elle "İzin ver" gerekiyor (tarayıcı güvenlik kısıtı, tasarım gereği) |
+| Açık (kısıt) | Ağır bozuk girişte round-trip öneri veremiyor | EN→TR'de "my nme is baris" yaz → ileri çevirinin kendisi bozuluyor ("adım baris"), geri-çeviri "step peace" oluyor ve benzerlik eşiğine takılıp bilinçli olarak elenir. Aynı cümlenin TR→EN hali ("benim adim baris") sorunsuz öneri veriyor. Round-trip yönteminin doğasında olan sınır |
 
 ---
 

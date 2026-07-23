@@ -7,7 +7,8 @@
 - **Üç dil, altı yön** — 🇬🇧 İngilizce, 🇹🇷 Türkçe ve 🇮🇹 İtalyanca arasında her yönde çeviri.
 - **Otomatik çeviri** — yazmayı bıraktığınızda çeviri kendiliğinden yapılır, buton yok.
 - **Cümle doğruluk kontrolü** — yazım ve dilbilgisi denetlenir; hatalar renkli altı çizgiyle işaretlenir, dokununca öneri çıkar, düzeltilmiş hali tek tıkla uygulanır. İsterseniz her çeviriyle birlikte otomatik çalışır.
-- **Akıllı yön takası** — ⇄ ile yön değişince metinler de yer değiştirir; yeniden çeviri istenmez.
+- **Akıllı düzeltme** — çeviri bittikten sonra arka planda sessizce geri-çeviri yapılır; yazdığınızla arasında fark çıkarsa "Bunu mu demek istediniz: …" şeridi belirir ve tek tıkla uygulanır.
+- **Akıllı yön takası** — ⇄ ile yön değişince çeviri kaynak kutuya taşınır ve karşısında özgün metnin düzeltilmiş hali çıkar; özgün girişe "Geri getir" ile dönülür.
 - **Tek tıkla temizleme** — giriş kutusundaki ✕ metni ve sonuçlarını siler, "Geri al" ile aynen döner.
 - **Saydam kelime tahmini** — İngilizce yazarken kelimenin devamı hayalet yazı olarak görünür, **Tab** ile tamamlanır (Datamuse API).
 - **Farklı anlamlar ve örnek cümleler** — çevrilen kelimenin sözlük anlamları ve kullanım örnekleri gösterilir.

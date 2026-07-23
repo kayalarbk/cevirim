@@ -105,6 +105,8 @@ $("dstLang").addEventListener("change", (e) => {
 // Dil çifti gerçekten değiştiyse eldeki çeviri artık geçersizdir.
 function onDirectionChanged() {
   clearCheck();
+  hideSuggestBar();
+  hideRevertBar();
   if ($("sourceText").value.trim()) translate();
   else resetResult();
 }
@@ -120,30 +122,90 @@ function swapSides() {
 
   swapLangs();
   flipHistory(oldSrc, oldDst);
+  // Ekrandaki kontrol sonucu eski kaynağa aitti; bayat bırakılmaz.
   clearCheck();
+  hideSuggestBar();
 
-  // Elde bir kaynak-hedef çifti varsa iki kutuyu takas etmek yeterli;
-  // metinler zaten mevcut olduğu için yeniden çeviri istenmez.
   if (pair && pair.dst) {
     animateSwap();
     $("sourceText").value = pair.dst;
-    lastTranslation = { src: pair.dst, dst: pair.src, from: srcLang, to: dstLang };
-    const box = $("resultBox");
-    box.classList.remove("empty");
-    box.textContent = pair.src;
-    $("saveBtn").disabled = false;
     // Anlamlar ve örnekler eski yöne aitti; yanıltmasın diye kaldırılır.
     currentExamples = [];
     pickedExample = "";
     renderDetails([], []);
     updateToolButtons();
     updateInputState();
+    showRevertBar(pair, oldSrc, oldDst);
+
+    // Yeni yöndeki çeviri, eski hedefin geri-çevirisidir — Akıllı
+    // düzeltme bunu zaten hesaplamış olabilir. Önbellek doluysa
+    // ekstra istek atmadan gösterilir.
+    const cached = rtCache.get(rtKey(pair.dst, oldDst, oldSrc));
+    if (cached !== undefined) {
+      setResult(pair.dst, cached);
+      return;
+    }
+
+    // Ağ yoksa eski davranışa dön: salt takas.
+    if (!navigator.onLine) {
+      setResult(pair.dst, pair.src);
+      showToast("Çevrimdışı — metinler yalnızca yer değiştirdi");
+      return;
+    }
+
+    translate(); // 1 istek, "Çevriliyor..." göstergesiyle
     return;
   }
 
   // Çevrilmemiş bir metin varsa yeni yönde çevirmek gerekir.
   if (text.trim()) translate();
 }
+
+// Hazır bir çeviriyi ağ isteği olmadan ekrana yazar.
+function setResult(src, dst) {
+  const box = $("resultBox");
+  box.classList.remove("empty");
+  box.textContent = dst;
+  box.classList.remove("pop");
+  void box.offsetWidth;
+  box.classList.add("pop");
+  lastTranslation = { src, dst, from: srcLang, to: dstLang };
+  API.seed(src, srcLang, dstLang, dst);
+  $("saveBtn").disabled = false;
+  updateToolButtons();
+  pushHistory(lastTranslation);
+}
+
+// Takastan sonra özgün giriş tek tıkla geri gelebilsin.
+let revertState = null;
+
+function showRevertBar(pair, oldSrc, oldDst) {
+  revertState = { src: pair.src, dst: pair.dst, from: oldSrc, to: oldDst };
+  $("revertText").textContent = pair.src;
+  $("revertBar").hidden = false;
+}
+
+function hideRevertBar() {
+  revertState = null;
+  $("revertBar").hidden = true;
+}
+
+$("revertBtn").addEventListener("click", () => {
+  if (!revertState) return;
+  const r = revertState;
+  hideRevertBar();
+  hideSuggestBar();
+  clearCheck();
+  clearTimeout(autoTimer);
+  requestSeq++; // uçuştaki takas çevirisi geri dönerse kutuyu ezmesin
+  setLangs(r.from, r.to);
+  $("sourceText").value = r.src;
+  setResult(r.src, r.dst);
+  updateInputState();
+  clearGhost();
+});
+
+$("revertCloseBtn").addEventListener("click", hideRevertBar);
 
 // Takas anını görünür kılan kısa kayma animasyonu.
 function animateSwap() {
@@ -184,6 +246,8 @@ async function translate() {
     pickedExample = "";
     renderDetails(meanings, examples);
     pushHistory(lastTranslation);
+    // Doğrulama arkadan gelir; çeviri sonucu zaten ekranda.
+    scheduleRoundTrip(lastTranslation);
   } catch (err) {
     if (myReq !== requestSeq) return;
     box.textContent = "⚠ Çeviri alınamadı: " + err.message + "\nİnternet bağlantınızı kontrol edin.";
@@ -202,6 +266,203 @@ function resetResult() {
   updateToolButtons();
   renderDetails([], []);
 }
+
+/* ============================================================
+   ARKA PLAN ROUND-TRIP DOĞRULAMA ("Akıllı düzeltme")
+
+   Çeviri bittikten sonra, sessizce ters yönde ikinci bir çeviri
+   koşar: "my nme is baris" → "benim adım barış" → "my name is barış".
+   Geri gelen metin kullanıcının yazdığından kelime düzeyinde
+   farklıysa, engellemeyen bir öneri şeridi çıkar.
+
+   Geri-çeviri sonuçları ayrıca önbelleğe yazılır; yön takası (⇄)
+   tam olarak bu çeviriye ihtiyaç duyduğu için oradan bedavaya
+   okunabiliyor.
+   ============================================================ */
+const SMART_FIX_KEY = "cevirim_smartfix";
+
+// Varsayılan AÇIK: yalnızca kullanıcı kapattıysa "0" yazılı olur.
+let smartFix = localStorage.getItem(SMART_FIX_KEY) !== "0";
+$("smartFixToggle").checked = smartFix;
+
+$("smartFixToggle").addEventListener("change", (e) => {
+  smartFix = e.target.checked;
+  try {
+    localStorage.setItem(SMART_FIX_KEY, smartFix ? "1" : "0");
+  } catch {
+    /* tercih kaydedilemezse oturum boyunca geçerli kalır */
+  }
+  if (!smartFix) {
+    clearTimeout(rtTimer);
+    rtSeq++; // uçuştaki doğrulama geri dönerse şerit açmasın
+    hideSuggestBar();
+  } else if (lastTranslation) {
+    scheduleRoundTrip(lastTranslation);
+  }
+});
+
+// Geri-çeviri önbelleği: "hedefDil|kaynakDil|hedefMetin" → geri-çeviri
+const rtCache = new Map();
+const RT_CACHE_MAX = 60;
+let rtTimer;
+let rtSeq = 0;
+
+function rtKey(text, from, to) {
+  return `${from}|${to}|${text}`;
+}
+
+function rtCacheSet(key, value) {
+  rtCache.set(key, value);
+  if (rtCache.size > RT_CACHE_MAX) rtCache.delete(rtCache.keys().next().value);
+}
+
+// Karşılaştırma için metni sadeleştirir: küçük harf, noktalama yok,
+// tek boşluk. Böylece yalnızca noktalama/büyük harf farkı öneri üretmez.
+function normWords(text, lang) {
+  return text
+    .toLocaleLowerCase(lang === "tr" ? "tr" : lang === "it" ? "it" : "en")
+    .replace(/[.,!?;:()[\]{}"'«»…\-–—]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+// İki metin arasındaki düzenleme (Levenshtein) uzaklığı. Yalnızca iki
+// satır tutulur; uzun metinlerde bellek şişmesin.
+function editDistance(a, b) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  const cur = new Array(b.length + 1);
+  for (let i = 1; i <= a.length; i++) {
+    cur[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    prev = cur.slice();
+  }
+  return prev[b.length];
+}
+
+// 1 = birebir aynı, 0 = tamamen farklı.
+function similarity(a, b) {
+  const max = Math.max(a.length, b.length);
+  return max === 0 ? 1 : 1 - editDistance(a, b) / max;
+}
+
+/* Öneri eşiği.
+
+   Kelime sayısı oranıyla karar vermek yanıltıcıydı: "benim adim baris"
+   gibi kısa bir cümlede iki kelime hatalıysa oran 0,67 çıkıp gerçek bir
+   yazım düzeltmesi eleniyordu. Karakter benzerliği ayrımı doğru yapıyor:
+   yazım hataları yüksek benzerlik (aynı kelimenin bozuk hali), ileri
+   çevirinin çöktüğü durumlar ise düşük benzerlik üretir.
+
+     "the wether is very nice today" ↔ "...weather..."  → 0,97  öner
+     "benim adim baris"  ↔ "benim adım barış"           → 0,88  öner
+     "my nme is baris"   ↔ "step peace"                 → 0,13  eleme
+     kelime sırası değişmiş ama anlam aynı              → ~0,40 eleme */
+const RT_MIN_SIMILARITY = 0.7;
+const RT_MAX_LEN = 600; // daha uzun metinlerde uzaklık hesabı pahalılaşır
+
+// Yalnızca noktalama/büyük harf farkı öneri sayılmaz.
+function wordsDiffer(a, b, lang) {
+  return normWords(a, lang).join(" ") !== normWords(b, lang).join(" ");
+}
+
+function worthSuggesting(original, back, lang) {
+  const a = normWords(original, lang).join(" ");
+  const b = normWords(back, lang).join(" ");
+  if (!a || !b || a === b) return false;
+  if (a.length > RT_MAX_LEN || b.length > RT_MAX_LEN) return false;
+  return similarity(a, b) >= RT_MIN_SIMILARITY;
+}
+
+function scheduleRoundTrip(pair) {
+  clearTimeout(rtTimer);
+  if (!smartFix || !pair || !pair.dst) return;
+  // Ana çeviriyi asla geciktirmez: sonuç gösterildikten sonra tetiklenir.
+  rtTimer = setTimeout(() => runRoundTrip(pair), 600);
+}
+
+async function runRoundTrip(pair) {
+  const key = rtKey(pair.dst, pair.to, pair.from);
+  const mySeq = ++rtSeq;
+
+  let back = rtCache.get(key);
+  if (back === undefined) {
+    if (!navigator.onLine) return; // sessizce vazgeç
+    try {
+      const res = await API.translate(pair.dst, pair.to, pair.from);
+      back = res.translated;
+      rtCacheSet(key, back);
+    } catch {
+      return; // 429/offline/servis hatası: kullanıcıyı rahatsız etme
+    }
+  }
+  if (mySeq !== rtSeq) return; // daha yeni bir doğrulama var
+  // Kullanıcı bu arada metni değiştirdiyse öneri artık geçersiz.
+  if ($("sourceText").value.trim() !== pair.src) return;
+
+  // Geri-çeviri anlamlı bir fark gösteriyorsa öner. Hedef kutudaki
+  // metin zaten bu düzeltilmiş kaynağın çevirisidir; uygulamak ek
+  // istek gerektirmez.
+  //
+  // Fark elenirse sessiz geçilir. Yazım denetimini burada yedek olarak
+  // çalıştırmayı denedim; "my nme is baris" için "My me is basis" gibi
+  // özel isimleri bozan öneriler ürettiği için vazgeçildi. Denetim
+  // yalnızca kullanıcı istediğinde (✓ Kontrol Et) veya otomatik kontrol
+  // açıkken çalışır.
+  if (worthSuggesting(pair.src, back, pair.from)) showSuggestBar(back);
+}
+
+let suggestion = null; // şeritte gösterilen düzeltme metni
+
+function showSuggestBar(text) {
+  // Aynı anda iki uyarı gösterme: otomatik kontrol paneli açıksa
+  // kapatılır, öneri tek şeritte toplanır. Kullanıcının elle açtığı
+  // kontrol paneli ise dokunulmadan bırakılır (bilerek istenmiş).
+  if (!$("checkPanel").hidden && checkAuto) clearCheck();
+  if (!$("checkPanel").hidden) return;
+
+  suggestion = text;
+  $("suggestText").textContent = text;
+  $("suggestBar").hidden = false;
+}
+
+function hideSuggestBar() {
+  suggestion = null;
+  $("suggestBar").hidden = true;
+}
+
+// Öneriyi uygulamak ek çeviri istemez: hedef kutudaki metin zaten bu
+// düzeltilmiş kaynağın çevirisidir.
+$("suggestApplyBtn").addEventListener("click", () => {
+  if (!suggestion || !lastTranslation) return;
+  const text = suggestion;
+  const { dst, from, to } = lastTranslation;
+
+  clearTimeout(autoTimer); // input olayı elle tetiklenmeyecek
+  $("sourceText").value = text;
+  hideSuggestBar();
+  clearCheck();
+  clearGhost();
+  updateInputState();
+
+  // Hedef kutudaki metin zaten bu düzeltilmiş kaynağın çevirisi;
+  // yeniden çeviri istemeye gerek yok.
+  lastTranslation = { src: text, dst, from, to };
+  API.seed(text, from, to, dst);
+  pushHistory(lastTranslation);
+  updateToolButtons();
+  showToast("Metin düzeltildi ✔");
+});
+
+$("suggestCloseBtn").addEventListener("click", hideSuggestBar);
 
 // ---------- Kutu araçları: seslendir & kopyala ----------
 const canSpeak = "speechSynthesis" in window;
@@ -280,6 +541,10 @@ function updateInputState() {
 let autoTimer;
 $("sourceText").addEventListener("input", () => {
   clearTimeout(autoTimer);
+  clearTimeout(rtTimer);
+  rtSeq++; // uçuştaki doğrulama eski metne aitti
+  hideSuggestBar();
+  hideRevertBar();
   updateInputState();
   const text = $("sourceText").value.trim();
   if (!text) {
@@ -313,11 +578,15 @@ $("clearInputBtn").addEventListener("click", () => {
   };
 
   clearTimeout(autoTimer);
+  clearTimeout(rtTimer);
+  rtSeq++;
   requestSeq++; // uçuştaki çeviri geri dönerse boş kutuyu doldurmasın
   $("sourceText").value = "";
   resetResult();
   clearGhost();
   clearCheck();
+  hideSuggestBar();
+  hideRevertBar();
   updateToolButtons();
   updateInputState();
   $("sourceText").focus();
@@ -420,6 +689,7 @@ const AUTO_CHECK_KEY = "cevirim_autocheck";
 let checkResult = null; // son kontrol sonucu
 let checkedText = ""; // sonucun ait olduğu metin
 let checkSeq = 0; // yarışan istekleri ayıklamak için
+let checkAuto = false; // panel otomatik mi açıldı, kullanıcı mı istedi
 
 let autoCheck = localStorage.getItem(AUTO_CHECK_KEY) === "1";
 $("autoCheckToggle").checked = autoCheck;
@@ -469,6 +739,11 @@ async function runCheck(auto) {
   if (!text) return;
   // Otomatik tetiklemede aynı metni tekrar tekrar denetlemeyelim.
   if (auto && text === checkedText && checkResult) return;
+
+  // Elle istenen kontrol ayrıntılı görünümdür; aynı anda öneri şeridi
+  // durmasın diye şerit kapatılır (tek uyarı kuralı).
+  checkAuto = !!auto;
+  if (!auto) hideSuggestBar();
 
   const mySeq = ++checkSeq;
   const panel = $("checkPanel");

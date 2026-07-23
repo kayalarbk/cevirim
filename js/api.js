@@ -82,6 +82,16 @@ const API = {
     return { translated: data.translatedText, meanings: [], examples: [] };
   },
 
+  // Elde hazır bir çeviri varsa (örneğin round-trip doğrulamasından
+  // dönen metin) önbelleğe ekler; böylece aynı çeviri için ağa çıkılmaz.
+  // Var olan kaydın üzerine yazmaz: oradaki anlam/örnek verisi daha zengin.
+  seed(text, from, to, translated) {
+    const key = `${from}|${to}|${text}`;
+    if (!this._cache.has(key)) {
+      this._cacheSet(key, { translated, meanings: [], examples: [] });
+    }
+  },
+
   async translate(text, from, to) {
     const key = `${from}|${to}|${text}`;
     const cached = this._cacheGet(key);
