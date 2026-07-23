@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="description" content="İngilizce-Türkçe çeviri ve kişisel kelime defteri uygulaması">
-  <title>Çevirim — İngilizce ⇄ Türkçe</title>
+  <meta name="description" content="İngilizce, Türkçe ve İtalyanca arası çeviri, cümle kontrolü ve kişisel kelime defteri uygulaması">
+  <title>Çevirim — İngilizce ⇄ Türkçe ⇄ İtalyanca</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0e1020">
   <!-- iOS "Ana Ekrana Ekle": tam ekran açılış, çentiğin altına uzanan koyu durum çubuğu -->
@@ -38,7 +38,7 @@
 
 <header>
   <h1>Çevirim</h1> <span class="globe">🌐</span>
-  <p>İngilizce ⇄ Türkçe çeviri + kişisel kelime defteri</p>
+  <p>İngilizce ⇄ Türkçe ⇄ İtalyanca çeviri + cümle kontrolü + kelime defteri</p>
 </header>
 
 <div class="tabs">
@@ -52,15 +52,16 @@
   <section id="translate" class="active">
     <div class="card">
       <div class="lang-row">
-        <span class="lang" id="srcLang">İngilizce</span>
-        <button id="swapBtn" title="Dilleri değiştir">⇄</button>
-        <span class="lang" id="dstLang">Türkçe</span>
+        <select class="lang-select" id="srcLang" aria-label="Kaynak dil"></select>
+        <button id="swapBtn" title="Dilleri ve metinleri değiştir" aria-label="Dilleri ve metinleri değiştir">⇄</button>
+        <select class="lang-select" id="dstLang" aria-label="Hedef dil"></select>
       </div>
 
-      <div class="boxes">
+      <div class="boxes" id="boxes">
         <div class="box input-wrap">
           <span class="box-label">Metin</span>
           <div class="box-tools">
+            <button class="tool-btn clear-btn" id="clearInputBtn" type="button" title="Metni temizle" aria-label="Metni temizle" hidden>✕</button>
             <button class="tool-btn" id="speakSrcBtn" type="button" title="Seslendir" aria-label="Metni seslendir" disabled>🔊</button>
             <button class="tool-btn" id="copySrcBtn" type="button" title="Kopyala" aria-label="Metni kopyala" disabled>📋</button>
           </div>
@@ -80,6 +81,26 @@
 
       <div class="btn-row">
         <button class="btn" id="saveBtn" disabled>➕ Kelimeyi Kaydet</button>
+        <button class="btn btn-soft" id="checkBtn" disabled>✓ Kontrol Et</button>
+        <label class="switch" title="Açıkken her otomatik çeviriyle birlikte cümle kontrolü de yapılır">
+          <!-- autocomplete=off: tarayıcının form geri yüklemesi, kayıtlı
+               tercihin üzerine yazmasın -->
+          <input type="checkbox" id="autoCheckToggle" autocomplete="off">
+          <span>Çeviriyle birlikte otomatik kontrol</span>
+        </label>
+      </div>
+
+      <!-- Cümle doğruluk kontrolü sonucu -->
+      <div class="check-panel" id="checkPanel" hidden>
+        <div class="check-head">
+          <span class="check-status" id="checkStatus" aria-live="polite"></span>
+          <div class="check-head-actions">
+            <button class="btn btn-soft" id="applyFixBtn" hidden>✨ Düzeltilmiş hali uygula</button>
+            <button class="banner-close" id="checkCloseBtn" title="Kapat" aria-label="Kontrol panelini kapat">✕</button>
+          </div>
+        </div>
+        <div class="check-text" id="checkText"></div>
+        <p class="check-note" id="checkNote"></p>
       </div>
 
       <div class="details" id="details">
@@ -95,7 +116,7 @@
         <div id="historyList"></div>
       </div>
 
-      <p class="hint">Yazmayı bıraktığınızda çeviri otomatik yapılır; veri internetten <b>Google Translate</b> (yedek: MyMemory) üzerinden alınır. İngilizce yazarken saydam kelime tahminini <b>Tab</b> ile tamamlayabilirsiniz. Kutuların sağ üstündeki <b>🔊</b> ile seslendirme, <b>📋</b> ile kopyalama yapabilirsiniz.</p>
+      <p class="hint">Yazmayı bıraktığınızda çeviri otomatik yapılır; veri internetten <b>Google Translate</b> (yedek: MyMemory) üzerinden alınır. Diller arasında <b>⇄</b> ile geçtiğinizde metinler de yer değiştirir, yeniden çeviri istenmez. <b>✓ Kontrol Et</b> cümlenin yazım ve dilbilgisini denetler; işaretli yerlere dokununca öneri görünür. İngilizce yazarken saydam kelime tahminini <b>Tab</b> ile tamamlayabilirsiniz. Kutuların sağ üstündeki <b>✕</b> temizler, <b>🔊</b> seslendirir, <b>📋</b> kopyalar.</p>
     </div>
   </section>
 
@@ -121,11 +142,8 @@
         </label>
         <label class="filter-field">
           <span>Yön</span>
-          <select id="dirSelect">
-            <option value="all">Hepsi</option>
-            <option value="en">EN → TR</option>
-            <option value="tr">TR → EN</option>
-          </select>
+          <!-- Seçenekler diller tablosundan üretilir (js/langs.js) -->
+          <select id="dirSelect"></select>
         </label>
         <div class="tag-filters" id="tagFilters"></div>
       </div>
@@ -181,7 +199,9 @@
   <button class="toast-action" id="toastAction" hidden></button>
 </div>
 
+<script src="js/langs.js"></script>
 <script src="js/api.js"></script>
+<script src="js/check.js"></script>
 <script src="js/storage.js"></script>
 <script src="js/backup.js"></script>
 <script src="js/app.js"></script>

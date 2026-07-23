@@ -257,7 +257,26 @@ section.active { display: block; animation: fadeInUp 0.5s ease both; }
   margin-bottom: 18px;
   font-weight: 600;
 }
-.lang-row .lang { font-size: 1.05rem; letter-spacing: 0.3px; }
+/* Dil seçimi — üç dil arasında geçiş */
+.lang-select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  color: var(--text);
+  padding: 9px 16px;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.25s, background 0.25s;
+}
+.lang-select:hover { background: rgba(255, 255, 255, 0.11); border-color: rgba(124, 108, 255, 0.5); }
+.lang-select:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(124, 108, 255, 0.28);
+}
+.lang-select option { background: #161a2e; color: var(--text); }
 #swapBtn {
   background: var(--grad);
   border: none;
@@ -275,6 +294,22 @@ section.active { display: block; animation: fadeInUp 0.5s ease both; }
    YAN YANA KUTULAR
    ============================================================ */
 .boxes { display: flex; gap: 16px; align-items: stretch; }
+
+/* Yön takasında iki kutunun yer değiştirdiğini gösteren kısa kayma */
+.boxes.swapping .box:first-child { animation: swapFromRight 0.45s cubic-bezier(0.2, 0.8, 0.3, 1.1) both; }
+.boxes.swapping .box:last-child { animation: swapFromLeft 0.45s cubic-bezier(0.2, 0.8, 0.3, 1.1) both; }
+@keyframes swapFromRight {
+  0% { transform: translateX(14%) scale(0.97); opacity: 0.25; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+@keyframes swapFromLeft {
+  0% { transform: translateX(-14%) scale(0.97); opacity: 0.25; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .boxes.swapping .box:first-child,
+  .boxes.swapping .box:last-child { animation: none; }
+}
 .box {
   flex: 1;
   min-width: 0;
@@ -337,6 +372,14 @@ section.active { display: block; animation: fadeInUp 0.5s ease both; }
 .tool-btn:disabled { opacity: 0.18; cursor: not-allowed; }
 .tool-btn.done { opacity: 1; border-color: var(--secondary); }
 .tool-btn.speaking { opacity: 1; animation: pulse 1s ease-in-out infinite; }
+/* Metni tek tıkla temizle — yalnızca kutuda yazı varken görünür */
+.tool-btn.clear-btn { color: var(--danger); opacity: 0.6; }
+.tool-btn.clear-btn:hover:not(:disabled) {
+  opacity: 1;
+  background: rgba(255, 123, 123, 0.16);
+  border-color: rgba(255, 123, 123, 0.45);
+}
+.tool-btn[hidden] { display: none; }
 
 @keyframes pulse {
   0%, 100% { transform: scale(1); }
@@ -443,6 +486,123 @@ textarea#sourceText::placeholder { color: var(--muted); }
   font-weight: 600;
 }
 .btn-soft:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); box-shadow: none; }
+
+/* Ayar anahtarı (otomatik kontrol) */
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.83rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.switch input { accent-color: var(--primary); width: 16px; height: 16px; cursor: pointer; }
+.switch:hover { color: var(--text); }
+
+/* ============================================================
+   CÜMLE DOĞRULUK KONTROLÜ
+   ============================================================ */
+.check-panel {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: rgba(10, 14, 30, 0.5);
+  animation: fadeInUp 0.35s ease both;
+  transition: opacity 0.3s;
+}
+.check-panel[hidden] { display: none; }
+/* Metin değişti: sonuç artık güncel değil */
+.check-panel.stale { opacity: 0.45; }
+.check-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.check-head-actions { display: flex; align-items: center; gap: 8px; }
+.check-status { font-size: 0.92rem; font-weight: 700; color: var(--muted); }
+.check-status.ok { color: #4ade80; }
+.check-status.warn { color: var(--gold); }
+.check-text {
+  font-size: 1.05rem;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--text);
+}
+.check-note { margin-top: 10px; font-size: 0.78rem; color: var(--muted); }
+
+/* Hatalı bölümler: türüne göre renkli altı çizgi */
+mark.err {
+  position: relative;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 1px 2px;
+  text-decoration: underline wavy;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+}
+mark.err:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+mark.err.e-spell { text-decoration-color: var(--danger); }
+mark.err.e-gram { text-decoration-color: var(--accent); }
+mark.err.e-punc { text-decoration-color: var(--gold); }
+mark.err.e-style { text-decoration-color: var(--secondary); }
+mark.err:hover, mark.err.open { background: rgba(255, 255, 255, 0.1); }
+
+/* Öneri baloncuğu — masaüstünde üzerine gelince, dokunmatikte dokununca */
+/* Baloncuk metnin ALTINDA açılır: üstte açılsaydı ilk satırdaki
+   işaretlerde panelin durum yazısını kapatırdı. */
+.err-tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  /* Sola hizalı: ortalanmış olsaydı satır başındaki kısa işaretlerde
+     baloncuk kartın dışına taşardı. */
+  left: 0;
+  transform: translateY(-4px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  background: #161a2e;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 6;
+}
+.err-tip b { color: var(--muted); font-weight: 600; }
+.err-tip i { color: var(--secondary); font-style: normal; }
+mark.err:hover .err-tip,
+mark.err.open .err-tip {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.tip-apply {
+  border: 1px solid rgba(124, 108, 255, 0.5);
+  background: rgba(124, 108, 255, 0.2);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tip-apply:hover { background: rgba(124, 108, 255, 0.38); }
 
 /* ============================================================
    OTOMATİK YEDEKLEME ÇUBUĞU
@@ -860,6 +1020,23 @@ textarea#sourceText::placeholder { color: var(--muted); }
   .boxes { flex-direction: column; }
   header h1 { font-size: 1.9rem; }
   .orb { filter: blur(70px); }
+  /* Üç dilin adı yan yana sığmayabilir */
+  .lang-row { flex-wrap: wrap; gap: 10px; }
+  .lang-select { font-size: 0.9rem; padding: 8px 12px; }
+  /* Dar ekranda baloncuk taşmasın */
+  .err-tip { white-space: normal; max-width: 62vw; }
+  /* Dikey dizilimde kutular yukarı-aşağı yer değiştirir */
+  .boxes.swapping .box:first-child { animation-name: swapFromBelow; }
+  .boxes.swapping .box:last-child { animation-name: swapFromAbove; }
+}
+
+@keyframes swapFromBelow {
+  0% { transform: translateY(10%) scale(0.97); opacity: 0.25; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes swapFromAbove {
+  0% { transform: translateY(-10%) scale(0.97); opacity: 0.25; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
 }
 
 /* Hareket azaltma tercihi olan kullanıcılar için */

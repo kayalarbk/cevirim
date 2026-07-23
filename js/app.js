@@ -15,10 +15,32 @@ function esc(s) {
 }
 
 // ---------- Durum ----------
-let srcLang = "en";
-let dstLang = "tr";
+const LANG_PREF_KEY = "cevirim_langs";
+
+// Son kullanılan dil çifti hatırlanır; geçersizse İngilizce → Türkçe.
+function loadLangPref() {
+  try {
+    const p = JSON.parse(localStorage.getItem(LANG_PREF_KEY) || "null");
+    if (p && isLang(p.src) && isLang(p.dst) && p.src !== p.dst) return p;
+  } catch {
+    /* bozuk kayıt: varsayılana dön */
+  }
+  return { src: "en", dst: "tr" };
+}
+
+const pref = loadLangPref();
+let srcLang = pref.src;
+let dstLang = pref.dst;
 let lastTranslation = null;
 let words = Store.load();
+
+function saveLangPref() {
+  try {
+    localStorage.setItem(LANG_PREF_KEY, JSON.stringify({ src: srcLang, dst: dstLang }));
+  } catch {
+    /* kota/gizli sekme: dil tercihi kaydedilemezse uygulama yine çalışır */
+  }
+}
 
 const POS_TR = {
   noun: "isim",
@@ -45,18 +67,92 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
   });
 });
 
-// ---------- Dil değiştirme ----------
+// ---------- Dil seçimi ----------
+function renderLangSelects() {
+  $("srcLang").innerHTML = langOptions(srcLang);
+  $("dstLang").innerHTML = langOptions(dstLang);
+}
+
+// Yalnızca dil kodlarını çevirir; kutulardaki metinlere dokunmaz.
 function swapLangs() {
   [srcLang, dstLang] = [dstLang, srcLang];
-  $("srcLang").textContent = srcLang === "en" ? "İngilizce" : "Türkçe";
-  $("dstLang").textContent = dstLang === "en" ? "İngilizce" : "Türkçe";
+  renderLangSelects();
+  saveLangPref();
   clearGhost();
 }
 
-$("swapBtn").addEventListener("click", () => {
-  swapLangs();
-  if ($("sourceText").value.trim()) translate();
+function setLangs(src, dst) {
+  srcLang = src;
+  dstLang = dst;
+  renderLangSelects();
+  saveLangPref();
+  clearGhost();
+}
+
+// Aynı dil iki tarafta seçilemez: çakışınca diğer taraf boşalan dili alır.
+$("srcLang").addEventListener("change", (e) => {
+  const chosen = e.target.value;
+  setLangs(chosen, chosen === dstLang ? srcLang : dstLang);
+  onDirectionChanged();
 });
+
+$("dstLang").addEventListener("change", (e) => {
+  const chosen = e.target.value;
+  setLangs(chosen === srcLang ? dstLang : srcLang, chosen);
+  onDirectionChanged();
+});
+
+// Dil çifti gerçekten değiştiyse eldeki çeviri artık geçersizdir.
+function onDirectionChanged() {
+  clearCheck();
+  if ($("sourceText").value.trim()) translate();
+  else resetResult();
+}
+
+// ---------- Yön takası: metinler de yer değiştirir ----------
+$("swapBtn").addEventListener("click", swapSides);
+
+function swapSides() {
+  const oldSrc = srcLang;
+  const oldDst = dstLang;
+  const pair = lastTranslation;
+  const text = $("sourceText").value;
+
+  swapLangs();
+  flipHistory(oldSrc, oldDst);
+  clearCheck();
+
+  // Elde bir kaynak-hedef çifti varsa iki kutuyu takas etmek yeterli;
+  // metinler zaten mevcut olduğu için yeniden çeviri istenmez.
+  if (pair && pair.dst) {
+    animateSwap();
+    $("sourceText").value = pair.dst;
+    lastTranslation = { src: pair.dst, dst: pair.src, from: srcLang, to: dstLang };
+    const box = $("resultBox");
+    box.classList.remove("empty");
+    box.textContent = pair.src;
+    $("saveBtn").disabled = false;
+    // Anlamlar ve örnekler eski yöne aitti; yanıltmasın diye kaldırılır.
+    currentExamples = [];
+    pickedExample = "";
+    renderDetails([], []);
+    updateToolButtons();
+    updateInputState();
+    return;
+  }
+
+  // Çevrilmemiş bir metin varsa yeni yönde çevirmek gerekir.
+  if (text.trim()) translate();
+}
+
+// Takas anını görünür kılan kısa kayma animasyonu.
+function animateSwap() {
+  const boxes = $("boxes");
+  boxes.classList.remove("swapping");
+  void boxes.offsetWidth;
+  boxes.classList.add("swapping");
+  setTimeout(() => boxes.classList.remove("swapping"), 480);
+}
 
 // ---------- Çeviri (tamamen otomatik) ----------
 let requestSeq = 0;
@@ -66,6 +162,9 @@ async function translate() {
   if (!text) return;
   const box = $("resultBox");
   const myReq = ++requestSeq;
+  // Otomatik kontrol açıksa çeviriyle aynı anda başlatılır: kullanıcı
+  // çeviriyi beklerken denetim sonucunu da görür, çeviri gecikmez.
+  if (autoCheck) runCheck(true);
   box.classList.remove("empty");
   box.textContent = "Çevriliyor...";
   $("saveBtn").disabled = true;
@@ -107,16 +206,12 @@ function resetResult() {
 // ---------- Kutu araçları: seslendir & kopyala ----------
 const canSpeak = "speechSynthesis" in window;
 
-function langTag(code) {
-  return code === "en" ? "en-US" : "tr-TR";
-}
-
 function speak(text, code, btn) {
   if (!canSpeak || !text) return;
   speechSynthesis.cancel();
   document.querySelectorAll(".tool-btn.speaking").forEach((b) => b.classList.remove("speaking"));
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = langTag(code);
+  u.lang = speechTag(code);
   u.rate = 0.95;
   btn.classList.add("speaking");
   u.onend = u.onerror = () => btn.classList.remove("speaking");
@@ -175,19 +270,81 @@ $("speakDstBtn").addEventListener("click", (e) =>
   speak(lastTranslation ? lastTranslation.dst : "", dstLang, e.currentTarget)
 );
 
+// Giriş kutusuna bağlı butonların (temizle, kontrol et) görünürlüğü.
+function updateInputState() {
+  const has = $("sourceText").value.length > 0;
+  $("clearInputBtn").hidden = !has;
+  $("checkBtn").disabled = !$("sourceText").value.trim();
+}
+
 let autoTimer;
 $("sourceText").addEventListener("input", () => {
   clearTimeout(autoTimer);
+  updateInputState();
   const text = $("sourceText").value.trim();
   if (!text) {
     resetResult();
     clearGhost();
+    clearCheck();
     return;
   }
+  // Metin değişti: ekrandaki kontrol sonucu artık bu metne ait değil.
+  markCheckStale();
   autoTimer = setTimeout(translate, 500);
   updateToolButtons();
   scheduleGhost();
 });
+
+// ---------- Tüm metni tek seferde silme (tek seviyeli geri al) ----------
+let clearedSnapshot = null;
+
+$("clearInputBtn").addEventListener("click", () => {
+  const text = $("sourceText").value;
+  if (!text) return;
+
+  const box = $("resultBox");
+  clearedSnapshot = {
+    text,
+    translation: lastTranslation,
+    result: box.textContent,
+    resultEmpty: box.classList.contains("empty"),
+    check: checkResult,
+    checkedText: checkedText,
+  };
+
+  clearTimeout(autoTimer);
+  requestSeq++; // uçuştaki çeviri geri dönerse boş kutuyu doldurmasın
+  $("sourceText").value = "";
+  resetResult();
+  clearGhost();
+  clearCheck();
+  updateToolButtons();
+  updateInputState();
+  $("sourceText").focus();
+  showToast("Metin temizlendi", "↩ Geri al", restoreCleared);
+});
+
+// Geri alma yalnızca ekrandaki durumu tazeler — yeniden çeviri istenmez.
+function restoreCleared() {
+  if (!clearedSnapshot) return;
+  const s = clearedSnapshot;
+  clearedSnapshot = null;
+
+  $("sourceText").value = s.text;
+  lastTranslation = s.translation;
+  const box = $("resultBox");
+  box.textContent = s.result;
+  box.classList.toggle("empty", s.resultEmpty);
+  $("saveBtn").disabled = !s.translation;
+  updateToolButtons();
+  updateInputState();
+  if (s.check) {
+    checkResult = s.check;
+    checkedText = s.checkedText;
+    renderCheck(s.checkedText, s.check);
+  }
+  $("sourceText").focus();
+}
 
 // ---------- Hayalet kelime tahmini ----------
 let ghostSuggestion = null; // tamamlanmış kelimenin tamamı
@@ -256,6 +413,199 @@ $("sourceText").addEventListener("blur", clearGhost);
 $("sourceText").addEventListener("scroll", () => {
   $("ghostLayer").scrollTop = $("sourceText").scrollTop;
 });
+
+// ---------- Cümle doğruluk kontrolü ----------
+const AUTO_CHECK_KEY = "cevirim_autocheck";
+
+let checkResult = null; // son kontrol sonucu
+let checkedText = ""; // sonucun ait olduğu metin
+let checkSeq = 0; // yarışan istekleri ayıklamak için
+
+let autoCheck = localStorage.getItem(AUTO_CHECK_KEY) === "1";
+$("autoCheckToggle").checked = autoCheck;
+
+$("autoCheckToggle").addEventListener("change", (e) => {
+  autoCheck = e.target.checked;
+  try {
+    localStorage.setItem(AUTO_CHECK_KEY, autoCheck ? "1" : "0");
+  } catch {
+    /* tercih kaydedilemezse oturum boyunca geçerli kalır */
+  }
+  if (autoCheck && $("sourceText").value.trim()) runCheck(true);
+});
+
+const ERR_CLASS = {
+  yazım: "e-spell",
+  dilbilgisi: "e-gram",
+  noktalama: "e-punc",
+  biçim: "e-style",
+};
+
+function clearCheck() {
+  checkSeq++; // uçuştaki kontrol geri dönerse paneli açmasın
+  checkResult = null;
+  checkedText = "";
+  const panel = $("checkPanel");
+  panel.hidden = true;
+  panel.classList.remove("stale");
+  $("applyFixBtn").hidden = true;
+  $("checkText").innerHTML = "";
+  $("checkNote").textContent = "";
+}
+
+// Panel açıkken metin değişirse sonucu silmiyoruz; soluklaştırıp
+// "güncel değil" diyoruz — kullanıcı önerileri hâlâ okuyabilsin.
+function markCheckStale() {
+  if ($("checkPanel").hidden || !checkResult) return;
+  if ($("sourceText").value === checkedText) {
+    $("checkPanel").classList.remove("stale");
+    return;
+  }
+  $("checkPanel").classList.add("stale");
+}
+
+async function runCheck(auto) {
+  const text = $("sourceText").value.trim();
+  if (!text) return;
+  // Otomatik tetiklemede aynı metni tekrar tekrar denetlemeyelim.
+  if (auto && text === checkedText && checkResult) return;
+
+  const mySeq = ++checkSeq;
+  const panel = $("checkPanel");
+  panel.hidden = false;
+  panel.classList.remove("stale");
+  $("checkStatus").textContent = "Kontrol ediliyor...";
+  $("checkStatus").className = "check-status";
+  $("applyFixBtn").hidden = true;
+
+  let res;
+  try {
+    res = await checkSentence(text, srcLang);
+  } catch (err) {
+    if (mySeq !== checkSeq) return;
+    $("checkStatus").textContent = "⚠ Kontrol yapılamadı: " + err.message;
+    $("checkStatus").className = "check-status warn";
+    return;
+  }
+  if (mySeq !== checkSeq) return;
+
+  checkResult = res;
+  checkedText = text;
+  renderCheck(text, res);
+}
+
+function checkNote(lang) {
+  if (lang === "tr") {
+    return "Türkçe için yerel yazım ve noktalama kuralları kullanıldı (dilbilgisi servisi Türkçe desteklemiyor).";
+  }
+  if (Check.lastSource === "tam") {
+    return "LanguageTool dilbilgisi denetimi + yerel yazım kuralları.";
+  }
+  return "Dilbilgisi servisine ulaşılamadı; yalnızca yerel yazım ve noktalama kuralları uygulandı.";
+}
+
+function renderCheck(text, res) {
+  const panel = $("checkPanel");
+  panel.hidden = false;
+  panel.classList.remove("stale");
+
+  const status = $("checkStatus");
+  if (res.correct) {
+    status.textContent = "✓ Cümle doğru görünüyor";
+    status.className = "check-status ok";
+  } else {
+    status.textContent = `⚠ ${res.errors.length} olası hata bulundu — işaretli yere dokunun`;
+    status.className = "check-status warn";
+  }
+
+  $("applyFixBtn").hidden = res.correct || res.correctedText === text;
+  $("checkText").innerHTML = highlightErrors(text, res.errors);
+  $("checkNote").textContent = checkNote(srcLang);
+}
+
+// Metni, hatalı aralıkları <mark> ile sararak yeniden kurar. Hatalar
+// check.js'te konuma göre sıralanmış ve çakışmaları ayıklanmış gelir.
+function highlightErrors(text, errors) {
+  let out = "";
+  let pos = 0;
+  errors.forEach((e, i) => {
+    if (e.index < pos) return;
+    out += esc(text.slice(pos, e.index));
+    const tip = e.suggestion
+      ? `<b>${esc(e.type)}</b> → <i>${esc(e.suggestion)}</i>
+         <button class="tip-apply" type="button" data-fix="${i}">Uygula</button>`
+      : `<b>${esc(e.type)}</b> — öneri yok`;
+    out +=
+      `<mark class="err ${ERR_CLASS[e.type] || "e-gram"}" data-i="${i}" tabindex="0">` +
+      `${esc(e.wrong)}<span class="err-tip">${tip}</span></mark>`;
+    pos = e.index + e.wrong.length;
+  });
+  return out + esc(text.slice(pos));
+}
+
+// Dokunmatik ekranda :hover yok; işarete dokunmak ipucunu açar.
+$("checkText").addEventListener("click", (e) => {
+  const fix = e.target.closest("button[data-fix]");
+  if (fix) {
+    applySingleFix(Number(fix.dataset.fix));
+    return;
+  }
+  const mark = e.target.closest("mark.err");
+  if (!mark) return;
+  const wasOpen = mark.classList.contains("open");
+  $("checkText").querySelectorAll("mark.err.open").forEach((m) => m.classList.remove("open"));
+  if (!wasOpen) mark.classList.add("open");
+});
+
+$("checkText").addEventListener("keydown", (e) => {
+  const mark = e.target.closest("mark.err");
+  if (!mark || (e.key !== "Enter" && e.key !== " ")) return;
+  e.preventDefault();
+  mark.classList.toggle("open");
+});
+
+// Sonuçtaki konumlar denetlenen metne göredir. Kullanıcı o metni
+// değiştirdiyse düzeltmeyi uygulamak yazdıklarını geri alırdı; bunun
+// yerine kontrolü tazeliyoruz.
+function checkIsStale() {
+  if ($("sourceText").value.trim() === checkedText) return false;
+  showToast("Metin değişti — kontrol yenileniyor");
+  runCheck(false);
+  return true;
+}
+
+// Tek bir öneriyi uygular; kalan hatalar için metin yeniden denetlenir.
+function applySingleFix(i) {
+  if (!checkResult || checkIsStale()) return;
+  const e = checkResult.errors[i];
+  if (!e || !e.suggestion) return;
+  const text = checkedText;
+  applyText(text.slice(0, e.index) + e.suggestion + text.slice(e.index + e.wrong.length));
+}
+
+$("applyFixBtn").addEventListener("click", () => {
+  if (!checkResult || checkIsStale()) return;
+  applyText(checkResult.correctedText);
+  showToast("Düzeltilmiş hali uygulandı ✔");
+});
+
+// Düzeltilmiş metni giriş kutusuna yazar, çeviriyi tazeler ve
+// kontrolü yeni metinle tekrarlar.
+function applyText(text) {
+  const ta = $("sourceText");
+  ta.value = text;
+  clearGhost();
+  updateToolButtons();
+  updateInputState();
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(translate, 300);
+  checkedText = "";
+  runCheck(false);
+  ta.focus();
+}
+
+$("checkBtn").addEventListener("click", () => runCheck(false));
+$("checkCloseBtn").addEventListener("click", clearCheck);
 
 // ---------- Anlamlar ve örnek cümleler ----------
 function renderDetails(meanings, examples) {
@@ -335,6 +685,19 @@ function pushHistory(entry) {
   renderHistory();
 }
 
+// Yön takasında geçmiş satırları da yeni yöne dönmeli. Yalnızca takas
+// edilen dil çiftine ait satırlar çevrilir; başka çiftlerdeki kayıtlar
+// (örneğin EN → IT) olduğu gibi kalır.
+function flipHistory(oldSrc, oldDst) {
+  let touched = false;
+  history = history.map((h) => {
+    if (h.from !== oldSrc || h.to !== oldDst) return h;
+    touched = true;
+    return { src: h.dst, dst: h.src, from: oldDst, to: oldSrc };
+  });
+  if (touched) renderHistory();
+}
+
 function renderHistory() {
   const panel = $("history");
   if (history.length === 0) {
@@ -359,9 +722,13 @@ $("historyList").addEventListener("click", (e) => {
   if (!btn) return;
   const h = history[Number(btn.dataset.h)];
   if (!h) return;
-  if (h.from !== srcLang) swapLangs();
+  // Satır hangi yönde çevrildiyse diller ona ayarlanır (üç dil olduğu
+  // için basit bir takas yetmez).
+  if (h.from !== srcLang || h.to !== dstLang) setLangs(h.from, h.to);
   $("sourceText").value = h.src;
+  clearCheck();
   updateToolButtons();
+  updateInputState();
   translate();
 });
 
@@ -662,6 +1029,17 @@ const SORTERS = {
   due: (a, b) => new Date(a.due) - new Date(b.due),
 };
 
+// Yön filtresi seçenekleri diller tablosundan üretilir; yeni dil
+// eklendiğinde burası kendiliğinden güncellenir.
+function renderDirOptions() {
+  const sel = $("dirSelect");
+  const current = sel.value || "all";
+  sel.innerHTML =
+    `<option value="all">Hepsi</option>` +
+    LANG_CODES.map((c) => `<option value="${c}">${LANGS[c].flag} ${LANGS[c].srcLabel}</option>`).join("");
+  sel.value = current;
+}
+
 function allTags() {
   const set = new Set();
   words.forEach((w) => w.tags.forEach((t) => set.add(t)));
@@ -723,7 +1101,7 @@ function viewRow(w, i) {
   return `<div class="word-item" style="animation-delay:${Math.min(i * 0.04, 0.4)}s">
       <div class="pair">
         <div class="src">${esc(w.src)} <span class="arrow">→</span> <span class="dst">${esc(w.dst)}</span></div>
-        <div class="meta">${w.from === "en" ? "EN → TR" : "TR → EN"} · ${new Date(w.date).toLocaleDateString("tr-TR")}${score} · ${dueLabel(w)}</div>
+        <div class="meta">${langShort(w.from)} → ${langShort(w.to)} · ${new Date(w.date).toLocaleDateString("tr-TR")}${score} · ${dueLabel(w)}</div>
         ${note}${tags}
       </div>
       <div class="row-actions">
@@ -929,9 +1307,9 @@ function showCard() {
   $("studyProgress").textContent = `Kart ${cardIndex + 1} / ${deck.length}`;
   const fc = $("flashcard");
   fc.classList.remove("flipped");
-  $("fcFront").innerHTML = `<span class="label">${
-    w.from === "en" ? "İngilizce" : "Türkçe"
-  } — cevap için karta tıkla</span><span>${esc(w.src)}</span>`;
+  $("fcFront").innerHTML = `<span class="label">${langFlag(w.from)} ${langName(
+    w.from
+  )} — cevap için karta tıkla</span><span>${esc(w.src)}</span>`;
   $("fcBack").innerHTML = `<span class="label">Cevap</span><span class="answer">${esc(w.dst)}</span>`;
 }
 
@@ -1072,9 +1450,12 @@ window.addEventListener("appinstalled", () => {
 
 // ---------- İlk yükleme ----------
 spawnParticles(26);
+renderLangSelects();
+renderDirOptions();
 Store.save(words);
 $("wordCount").textContent = words.length;
 updateToolButtons();
+updateInputState();
 renderBackupStatus();
 renderOnlineState();
 renderStudySummary();

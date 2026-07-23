@@ -1,7 +1,7 @@
 {
-  "name": "Çevirim — İngilizce ⇄ Türkçe",
+  "name": "Çevirim — İngilizce ⇄ Türkçe ⇄ İtalyanca",
   "short_name": "Çevirim",
-  "description": "İngilizce-Türkçe çeviri ve kişisel kelime defteri",
+  "description": "Çeviri, cümle doğruluk kontrolü ve kişisel kelime defteri",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

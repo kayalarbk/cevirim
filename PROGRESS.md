@@ -6,15 +6,63 @@
 
 ## Özet
 
-Çevirim, İngilizce ⇄ Türkçe çeviri yapan ve çevirdiğin kelimeleri kişisel bir
-kelime defterine kaydeden bir web uygulamasıdır. Amaç, çeviri sırasında
-karşılaşılan yeni kelimeleri kaybetmeden biriktirip aralıklı tekrar (spaced
-repetition) ile ezberlemektir. Kurulum gerektirmez; saf HTML/CSS/JS ile
-çalışır, PWA olarak telefona veya masaüstüne yüklenebilir ve çevrimdışı açılır.
+Çevirim, İngilizce ⇄ Türkçe ⇄ İtalyanca çeviri yapan, yazdığın cümlenin
+yazım/dilbilgisini denetleyen ve çevirdiğin kelimeleri kişisel bir kelime
+defterine kaydeden bir web uygulamasıdır. Amaç, çeviri sırasında karşılaşılan
+yeni kelimeleri kaybetmeden biriktirip aralıklı tekrar (spaced repetition) ile
+ezberlemektir. Kurulum gerektirmez; saf HTML/CSS/JS ile çalışır, PWA olarak
+telefona veya masaüstüne yüklenebilir ve çevrimdışı açılır.
 
 ---
 
 ## Tamamlanan işler (en yeni üstte)
+
+### 2026-07-23 — Geliştirme turu: İtalyanca, doğruluk motoru, swap, temizle
+
+**1. İtalyanca dil desteği**
+- `js/langs.js` eklendi: desteklenen diller artık tek bir tablodan yönetiliyor
+  (ad, bayrak, kısa kod, seslendirme etiketi). Yeni dil eklemek tek satır.
+- Dil satırındaki sabit etiketler yerine iki `<select>` geldi; üç dil de her
+  iki yönde seçilebiliyor. Aynı dil iki tarafta seçilemez (çakışınca diğer
+  taraf boşalan dili alır).
+- Kelime defteri yön filtresi, satır rozetleri (`TR → IT`), çalışma kartı
+  etiketleri ve seslendirme dili hep bu tablodan besleniyor.
+- Son kullanılan dil çifti `localStorage`'a yazılıyor.
+- Doğrulandı: EN→TR, TR→EN, EN→IT, TR→IT, IT→TR yönlerinde çeviri çalışıyor.
+
+**2. Cümle doğruluk kontrol motoru**
+- `js/check.js` eklendi. Sözleşme: `checkSentence(text, lang)` →
+  `{ correct, errors: [{ index, wrong, suggestion, type }], correctedText }`.
+- İki katman: (a) yerel kural motoru — dile özel yazım yanlışı sözlükleri,
+  çok kelimeli kalıplar, noktalama/biçim kuralları, cümle başı büyük harf,
+  cümle sonu noktalama; (b) LanguageTool genel API'si (EN ve IT için,
+  çevrimiçiyken). Türkçe LanguageTool'da desteklenmediği için yalnızca yerel
+  katman çalışır ve panelde bu belirtilir.
+- Arayüz: ayrı **✓ Kontrol Et** butonu, hatalı bölümlerde türe göre renkli
+  dalgalı altı çizgi, üzerine gelince/dokununca açılan öneri baloncuğu,
+  baloncuktan tek hatayı **Uygula**, üstten **✨ Düzeltilmiş hali uygula**.
+- **Çeviriyle birlikte otomatik kontrol** anahtarı (tercih kaydediliyor);
+  açıkken çeviriyle eşzamanlı çalışır, çeviriyi geciktirmez.
+- Metin değişince panel soluklaşır; bayat sonuç üzerinden düzeltme uygulanmaz.
+
+**3. Yön değişince mesajların yer değiştirmesi**
+- ⇄ butonu artık yalnızca dilleri değil içeriği de takas ediyor: giriş metni
+  ile çeviri yer değiştiriyor, geçmiş listesinde o dil çiftine ait satırların
+  kaynak-hedef tarafları çevriliyor, kutular kısa bir kayma animasyonuyla
+  geçiyor.
+- Doğrulandı: TR→EN "merhaba → Hello" durumunda swap sonrası EN→TR
+  "Hello → merhaba" ve **sıfır** ağ isteği.
+
+**4. Tüm cümleyi tek seferde silme**
+- Giriş kutusunda, yalnızca metin varken görünen ✕ butonu. Metni, çeviriyi ve
+  kontrol sonucunu birlikte siliyor, odağı giriş kutusuna döndürüyor.
+- Tek seviyeli geri alma: "↩ Geri al" bildirimi metni, çeviriyi ve kontrol
+  panelini aynen geri getiriyor — yeniden çeviri isteği yapılmadan.
+
+**Yan düzeltmeler:** service worker önbelleği `v3`, otomatik kontrol
+anahtarına `autocomplete="off"` (tarayıcının form geri yüklemesi kayıtlı
+tercihi eziyordu), öneri baloncuğu kart dışına taşmayacak şekilde sola hizalı
+ve metnin altında.
 
 ### 2026-07-23 — iOS PWA tamamlama
 - `index.html`'e `apple-mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`
@@ -78,11 +126,16 @@ cevirim/
 │   ├── icon-192.png / icon-512.png                # purpose: any
 │   └── icon-192-maskable.png / icon-512-maskable.png
 └── js/
+    ├── langs.js        # Desteklenen diller tablosu (tek kaynak) — ilk yüklenir
     ├── api.js          # Dış servisler: Google Translate, MyMemory, Datamuse
+    ├── check.js        # Cümle doğruluk motoru: yerel kurallar + LanguageTool
     ├── storage.js      # localStorage kalıcılığı + kayıt normalizasyonu
     ├── backup.js       # File System Access API ile otomatik dosya yedeği
     └── app.js          # Tüm arayüz mantığı (sekmeler, çeviri, liste, çalışma)
 ```
+
+Betik yükleme sırası önemlidir: `langs.js` → `api.js` → `check.js` →
+`storage.js` → `backup.js` → `app.js` (storage ve app, diller tablosunu kullanır).
 
 ---
 
@@ -99,6 +152,11 @@ cevirim/
 | File System Access API ile otomatik yedek | iOS/tarayıcı uzun süre kullanılmayan sitenin verisini silebiliyor | 2026-07-22 |
 | Aralıklar 1/3/7/16/35/90 gün | Klasik Leitner benzeri artan aralık; ezber pekişsin | 2026-07-22 |
 | Status bar `black-translucent` | Koyu tema ile ekranın tepesine kadar uzanan bütünlüklü görünüm | 2026-07-23 |
+| Diller ayrı bir tabloda (`langs.js`) | Dil kodları koda serpiştirilmişti; yeni dil eklemek her dosyaya dokunmayı gerektiriyordu | 2026-07-23 |
+| Kontrol motoru iki katmanlı | LanguageTool Türkçe desteklemiyor ve çevrimdışıyken erişilemiyor; yerel kural katmanı her koşulda bir sonuç üretiyor | 2026-07-23 |
+| Otomatik kontrol çeviriyle eşzamanlı (öncesinde değil) | Sıralı çalıştırmak çeviri gecikmesini iki katına çıkarıyordu; kullanıcı ikisini de aynı anda görüyor | 2026-07-23 |
+| Swap'ta yeniden çeviri yok | Her iki metin de elde; yeni istek hem gereksiz hem de kota tüketiyor | 2026-07-23 |
+| Bayat kontrol sonucu silinmez, soluklaştırılır | Kullanıcı yazmaya devam ederken önerileri okumayı sürdürebilsin; ama bayat konumlarla düzeltme uygulanmaz | 2026-07-23 |
 
 ---
 
@@ -109,9 +167,17 @@ cevirim/
 2. **File System Access API Safari'de yok** — iOS'ta otomatik dosya yedeği
    çalışmıyor; oradaki kullanıcıya elle "Dışa aktar" (JSON indir) butonu
    sunulmalı.
-3. Kelime listesinde sayfalama veya sanal liste (kayıt sayısı büyürse).
-4. Çalışma modunda günlük hedef / seri (streak) göstergesi.
-5. `sw.js` güncellendiğinde kullanıcıya "yeni sürüm hazır, yenile" bildirimi.
+3. Türkçe dilbilgisi denetimi yok (yalnızca yazım/noktalama). "de/da" ve
+   "ki" ayrı yazımı gibi kurallar eklenebilir — yanlış pozitif riski yüksek
+   olduğu için şimdilik bilinçli olarak dışarıda bırakıldı.
+4. Kelime tamamlama tahmini (hayalet yazı) yalnızca İngilizce çalışıyor;
+   Datamuse başka dil desteklemiyor, İtalyanca/Türkçe için başka kaynak gerek.
+5. LanguageTool ücretsiz API'sinin dakikalık istek sınırı var; otomatik
+   kontrol çok sık tetiklenirse 429 dönebilir (şu an 500 ms debounce + sonuç
+   önbelleği ile hafifletiliyor).
+6. Kelime listesinde sayfalama veya sanal liste (kayıt sayısı büyürse).
+7. Çalışma modunda günlük hedef / seri (streak) göstergesi.
+8. `sw.js` güncellendiğinde kullanıcıya "yeni sürüm hazır, yenile" bildirimi.
 
 ---
 

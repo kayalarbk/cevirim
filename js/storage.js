@@ -19,8 +19,9 @@ const Store = {
       id: typeof w.id === "string" && w.id ? w.id : this.newId(),
       src: w.src,
       dst: w.dst,
-      from: w.from === "tr" ? "tr" : "en",
-      to: w.to === "en" ? "en" : "tr",
+      // Dil kodu diller tablosunda yoksa (bozuk/eski kayıt) varsayılana düşer.
+      from: isLang(w.from) ? w.from : "en",
+      to: isLang(w.to) ? w.to : "tr",
       date: w.date || new Date().toISOString(),
       right: Number.isFinite(w.right) ? w.right : 0,
       wrong: Number.isFinite(w.wrong) ? w.wrong : 0,

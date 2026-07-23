@@ -7,13 +7,15 @@
    asla önbelleğe alınmaz — bayat çeviri göstermek yanıltıcı olur.
    ============================================================ */
 
-const CACHE = "cevirim-kabuk-v2";
+const CACHE = "cevirim-kabuk-v3";
 
 const SHELL = [
   "./",
   "./index.html",
   "./css/style.css",
+  "./js/langs.js",
   "./js/api.js",
+  "./js/check.js",
   "./js/storage.js",
   "./js/backup.js",
   "./js/app.js",
