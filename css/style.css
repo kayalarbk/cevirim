@@ -813,6 +813,8 @@ mark.err.open .err-tip {
   text-align: left;
 }
 .history-item:hover { background: rgba(255, 255, 255, 0.09); }
+.history-more { margin-top: 8px; width: 100%; text-align: center; }
+.history-more[hidden] { display: none; }
 .history-item .h-src { font-weight: 700; }
 .history-item .h-dst { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .h-note { text-transform: none; letter-spacing: 0; font-weight: 400; opacity: 0.8; }

@@ -17,6 +17,14 @@ telefona veya masaüstüne yüklenebilir ve çevrimdışı açılır.
 
 ## Tamamlanan işler (en yeni üstte)
 
+### 2026-07-23 — "Son Çeviriler" listesinde 10 satır sınırı
+- Geçmiş listesi ilk **10** satırı gösteriyor; fazlası gizleniyor ve
+  "▼ N çeviri daha" düğmesiyle açılıp kapanabiliyor (`HISTORY_VISIBLE = 10`).
+- Satır dizinleri kırpmadan etkilenmiyor; açıkken 12. satıra tıklamak doğru
+  kaydı yüklüyor. 10 veya daha az kayıtta düğme hiç görünmüyor, geçmiş
+  temizlenince açık/kapalı durumu sıfırlanıyor.
+- Kayıt üst sınırı yine 20 (`HISTORY_MAX`); bu değişiklik yalnızca görünürlük.
+
 ### 2026-07-23 — LanguageTool kaldırıldı, denetim tümüyle yerel
 - `js/check.js` içinden LanguageTool çağrısı, tür eşlemesi ve sonuç
   önbelleği çıkarıldı; motor artık yalnızca yerel kural katmanından oluşuyor

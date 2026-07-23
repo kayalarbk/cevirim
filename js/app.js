@@ -967,14 +967,26 @@ function flipHistory(oldSrc, oldDst) {
   if (touched) renderHistory();
 }
 
+// Liste uzayınca sayfayı boğmasın: ilk 10 satır görünür, kalanı
+// "daha göster" ile açılır.
+const HISTORY_VISIBLE = 10;
+let historyExpanded = false;
+
 function renderHistory() {
   const panel = $("history");
   if (history.length === 0) {
     panel.hidden = true;
+    historyExpanded = false;
+    $("historyMoreBtn").hidden = true;
     return;
   }
   panel.hidden = false;
-  $("historyList").innerHTML = history
+
+  const hidden = history.length - HISTORY_VISIBLE;
+  const shown = historyExpanded ? history : history.slice(0, HISTORY_VISIBLE);
+
+  // Dizin tüm geçmişe göre verilir; kırpma tıklamada yanlış satırı açmasın.
+  $("historyList").innerHTML = shown
     .map(
       (h, i) =>
         `<button class="history-item" type="button" data-h="${i}">
@@ -984,7 +996,18 @@ function renderHistory() {
          </button>`
     )
     .join("");
+
+  const more = $("historyMoreBtn");
+  more.hidden = hidden <= 0;
+  if (hidden > 0) {
+    more.textContent = historyExpanded ? "▲ Daha az göster" : `▼ ${hidden} çeviri daha`;
+  }
 }
+
+$("historyMoreBtn").addEventListener("click", () => {
+  historyExpanded = !historyExpanded;
+  renderHistory();
+});
 
 $("historyList").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-h]");
